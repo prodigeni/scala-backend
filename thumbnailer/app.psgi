@@ -7,7 +7,7 @@ use Data::Dumper;
 
 # For some reason Apache SetEnv directives dont propagate
 # correctly to the dispatchers, so forcing PSGI and env here 
-# is safer. #Test
+# is safer. #Test #Test3
 my $psgi = path($RealBin, '.', 'app.pl');
 die "Unable to read startup script: $psgi" unless -r $psgi;
 
