@@ -1,0 +1,108 @@
+#!/usr/bin/perl -w
+
+use strict;
+
+use FindBin qw/$Bin/;
+use lib "$Bin/../../lib";
+
+use DateTime;
+use Getopt::Long;
+use Wikia::DW::Common;
+
+my $experiment_id;
+my $begin;
+my $end;
+my $sample = 500000;
+
+GetOptions( 'experiment_id=i' => \$experiment_id,
+            'begin=s'         => \$begin,
+            'end=s'           => \$end,
+            'sample:i'        => \$sample );
+
+my $dt = DateTime->now();
+my $dt_str = $dt->ymd(''); # . $dt->hms('');
+
+log_with_ts("Dropping tmp tables for experiment_id: $experiment_id");
+
+my $tmp_tables = Wikia::DW::Common::statsdb_arrayref(
+   "SELECT table_name
+      FROM information_schema.tables
+     WHERE table_schema = 'statsdb_tmp'
+       AND table_name LIKE '$dt_str" . "_$experiment_id" . "_%'
+     ORDER BY table_name",
+    'hash'
+);
+
+foreach my $t (@$tmp_tables) {
+    log_with_ts("  Dropping Table: " . $t->{table_name});
+    Wikia::DW::Common::statsdb_do("DROP TABLE IF EXISTS $t->{table_name}");
+}
+
+my $treatment_table = 'statsdb_tmp.' . $dt_str . '_' . $experiment_id . '_ab_treatments';
+
+log_with_ts("Creating tmp table of treatments for experiment_id: $experiment_id");
+log_with_ts("  Table: $treatment_table");
+
+Wikia::DW::Common::statsdb_do("DROP TABLE IF EXISTS $treatment_table");
+
+Wikia::DW::Common::statsdb_do(
+   "CREATE TABLE $treatment_table (
+        beacon             CHAR(10),
+        treatment_group_id TINYINT,
+        start_time         DATETIME,
+        end_time           DATETIME,
+        PRIMARY KEY (beacon, treatment_group_id)
+    ) ENGINE=InnoDB"
+);
+
+log_with_ts("Sampling users for each treatment group");
+
+my $treatment_groups = Wikia::DW::Common::statsdb_arrayref(
+   "SELECT id,
+           name
+      FROM statsdb_mart.treatment_groups
+     WHERE experiment_id = $experiment_id
+     ORDER BY id",
+    'hash'
+);
+
+my $statsdb = Wikia::DW::Common::statsdb;
+
+$statsdb->do('SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED');
+$statsdb->do('SET AUTOCOMMIT=1');
+
+foreach my $tg (@$treatment_groups) {
+    log_with_ts("  Treatment Group: " . $tg->{id});
+    $statsdb->do(
+       "INSERT INTO $treatment_table (
+            beacon,
+            treatment_group_id,
+            start_time,
+            end_time
+        )
+        SELECT beacon,
+               treatment_group_id AS treatment_group_id,
+               MIN(event_ts)      AS start_time,
+               MAX(event_ts)      AS end_time
+          FROM fact_ab_treatment_events
+         WHERE treatment_group_id = $tg->{id}
+           AND event_ts >= TIMESTAMP('$begin')
+           AND event_ts <  TIMESTAMP('$end')
+         GROUP BY beacon,
+                  treatment_group_id
+         ORDER BY rand()
+         LIMIT $sample"
+    );
+}
+
+log_with_ts("Done");
+
+$statsdb->disconnect;
+
+sub log_with_ts {
+    my $msg = shift;
+    my $dt = `date`;
+    chomp($dt);
+    print "$dt : $msg\n";
+}
+

@@ -1,0 +1,79 @@
+STATSDB_HOME=/usr/wikia/backend
+
+# loadevents (fact_*_events tables)
+*/15 * * * * $STATSDB_HOME/bin/dw/loadevents --source api     >> /home/analytics/logs/api.log 2>&1
+*/15 * * * * $STATSDB_HOME/bin/dw/loadevents --source event   >> /home/analytics/logs/event.log 2>&1
+*/15 * * * * $STATSDB_HOME/bin/dw/loadevents --source special >> /home/analytics/logs/special.log 2>&1
+*/15 * * * * $STATSDB_HOME/bin/dw/loadevents --source view    >> /home/analytics/logs/view.log 2>&1
+
+# etl - other facts
+0 * * * * $STATSDB_HOME/bin/dw/etl --table fact_chatlogs >> /home/analytics/logs/fact_chatlogs.log 2>&1
+
+# etl - rollups
+*/5 * * * * $STATSDB_HOME/bin/dw/etl --table rollup_api_events            >> /home/analytics/logs/rollup_api_events.log 2>&1
+*/10 * * * * $STATSDB_HOME/bin/dw/etl --table rollup_cluster_pageviews     >> /home/analytics/logs/rollup_cluster_pageviews.log 2>&1
+*/10 * * * * $STATSDB_HOME/bin/dw/etl --table rollup_edit_events           >> /home/analytics/logs/rollup_edit_events.log 2>&1
+*/10 * * * * $STATSDB_HOME/bin/dw/etl --table rollup_event_events          >> /home/analytics/logs/rollup_event_events.log 2>&1
+*/10 * * * * $STATSDB_HOME/bin/dw/etl --table rollup_hub_beacon_pageviews  >> /home/analytics/logs/rollup_hub_beacon_pageviews.log 2>&1
+*/10 * * * * $STATSDB_HOME/bin/dw/etl --table rollup_search_events         >> /home/analytics/logs/rollup_search_events.log 2>&1
+0,30 * * * * $STATSDB_HOME/bin/dw/etl --table rollup_wiki_article_pageviews >> /home/analytics/logs/rollup_wiki_article_pageviews.log 2>&1
+*/10 * * * * $STATSDB_HOME/bin/dw/etl --table rollup_wiki_beacon_pageviews >> /home/analytics/logs/rollup_wiki_beacon_pageviews.log 2>&1
+*/10 * * * * $STATSDB_HOME/bin/dw/etl --table rollup_wiki_events           >> /home/analytics/logs/rollup_wiki_events.log 2>&1
+*/10 * * * * $STATSDB_HOME/bin/dw/etl --table rollup_wiki_namespace_country_events >> /home/analytics/logs/rollup_wiki_namespace_country_events.log 2>&1
+*/10 * * * * $STATSDB_HOME/bin/dw/etl --table rollup_wiki_namespace_user_events    >> /home/analytics/logs/rollup_wiki_namespace_user_events.log 2>&1
+*/10 * * * * $STATSDB_HOME/bin/dw/etl --table rollup_wiki_pageviews        >> /home/analytics/logs/rollup_wiki_pageviews.log 2>&1
+*/10 * * * * $STATSDB_HOME/bin/dw/etl --table rollup_wiki_provider_views   >> /home/analytics/logs/rollup_wiki_provider_views.log 2>&1
+*/10 * * * * $STATSDB_HOME/bin/dw/etl --table rollup_wiki_searches         >> /home/analytics/logs/rollup_wiki_searches.log 2>&1
+*/10 * * * * $STATSDB_HOME/bin/dw/etl --table rollup_wiki_user_events      >> /home/analytics/logs/rollup_wiki_user_events.log 2>&1
+*/10 * * * * $STATSDB_HOME/bin/dw/etl --table rollup_wiki_user_geo_events  >> /home/analytics/logs/rollup_wiki_user_geo_events.log 2>&1
+*/10 * * * * $STATSDB_HOME/bin/dw/etl --table rollup_wiki_lang_pageviews   >> /home/analytics/logs/rollup_wiki_lang_pageviews.log 2>&1
+*/10 * * * * $STATSDB_HOME/bin/dw/etl --table rollup_wiki_user_pageviews   >> /home/analytics/logs/rollup_wiki_user_pageviews.log 2>&1
+*/10 * * * * $STATSDB_HOME/bin/dw/etl --table rollup_wiki_trackingevents   >> /home/analytics/logs/rollup_wiki_trackingevents.log 2>&1
+*/10 * * * * $STATSDB_HOME/bin/dw/etl --table rollup_wiki_video_views      >> /home/analytics/logs/rollup_wiki_video_views.log 2>&1
+
+#*/10 * * * * $STATSDB_HOME/bin/dw/etl --table rollup_wiki_referrers        >> /home/analytics/logs/rollup_wiki_referrers.log 2>&1
+#*/10 * * * * $STATSDB_HOME/bin/dw/etl --table rollup_wiki_search_referrers >> /home/analytics/logs/rollup_wiki_search_referrers.log 2>&1
+#*/10 * * * * $STATSDB_HOME/bin/dw/etl --table rollup_wiki_visits           >> /home/analytics/logs/rollup_wiki_visits.log 2>&1
+
+# etl - dimensions
+5 * * * * $STATSDB_HOME/bin/dw/etl --table dimension_top_wikis                 >> /home/analytics/logs/dimension_top_wikis.log 2>&1
+0,30 * * * * $STATSDB_HOME/bin/dw/etl --table dimension_library_videos         >> /home/analytics/logs/dimension_library_videos.log 2>&1
+5,35 * * * * $STATSDB_HOME/bin/dw/etl --table dimension_users                  >> /home/analytics/logs/dimension_users.log 2>&1
+5 * * * * $STATSDB_HOME/bin/dw/etl --table dimension_uncyclo_users             >> /home/analytics/logs/dimension_uncyclo_users.log 2>&1
+5 * * * * $STATSDB_HOME/bin/dw/etl --table dimension_wow_users                 >> /home/analytics/logs/dimension_wow_users.log 2>&1
+10,25,40,55 * * * * $STATSDB_HOME/bin/dw/etl --table dimension_wikis           >> /home/analytics/logs/dimension_wikis.log 2>&1
+10,25,40,55 * * * * $STATSDB_HOME/bin/dw/etl --table dimension_wiki_domains    >> /home/analytics/logs/dimension_wiki_domains.log 2>&1
+0 */4 * * * $STATSDB_HOME/bin/dw/etl --table dimension_wiki_content_namespaces >> /home/analytics/logs/dimension_wiki_content_namespaces.log 2>&1
+10,25,40,55 * * * * $STATSDB_HOME/bin/dw/etl --table dimension_wiki_variables  >> /home/analytics/logs/dimension_wiki_variables.log 2>&1
+
+# Custom Scripts
+0 2 * * * $STATSDB_HOME/bin/dw/rollup_wiki_visitors >> /home/analytics/logs/rollup_wiki_visitors.log 2>&1
+0 2 * * * $STATSDB_HOME/bin/dw/report_wiki_video_views >> /home/analytics/logs/report_wiki_video_views.log 2>&1
+30 17 * * * $STATSDB_HOME/bin/dw/report_wiki_video_embeds >> /home/analytics/logs/report_wiki_video_embeds.log 2>&1
+0 */4 * * * $STATSDB_HOME/bin/dw/run_query --table report_wiki_recent_pageviews --type replace >> /home/analytics/logs/report_wiki_recent_pageviews.log 2>&1
+
+# qdup_manager
+*/10 * * * * /home/analytics/src/qdup/bin/qdup_manager --lib /usr/wikia/backend/lib --pool 20
+
+# qdup queuing
+0 */8 * * * $STATSDB_HOME/bin/dw/run_query --table dimension_wiki_articles --type queue >> /home/analytics/logs/dimension_wiki_articles_queue.log 2>&1
+0 */4 * * * $STATSDB_HOME/bin/dw/run_query --table dimension_wiki_embeds --type queue >> /home/analytics/logs/dimension_wiki_embeds_queue.log 2>&1
+0 */4 * * * $STATSDB_HOME/bin/dw/run_query --table dimension_wiki_image_counts --type queue >> /home/analytics/logs/dimension_wiki_image_counts_queue.log 2>&1
+0 */4 * * * $STATSDB_HOME/bin/dw/run_query --table wikidb_video_views --type queue >> /home/analytics/logs/wikidb_video_views_queue.log 2>&1
+
+# WAM
+0 2 * * * $STATSDB_HOME/bin/dw/wam >> /home/analytics/logs/wam.log 2>&1
+
+# Manage Partitions
+0 8 * * * $STATSDB_HOME/bin/dw/manage_partitions >> /home/analytics/logs/manage_partitions.log 2>&1
+0 8 * * * $STATSDB_HOME/bin/dw/manage_partitions --schema statsdb_mart >> /home/analytics/logs/manage_partitions_mart.log 2>&1
+
+# Cleanup empty reject files
+0 8 * * * find /var/lib/mysql/data/logs/track/ -name '*.reject' -exec wc -l {} \; | awk '/^0 / {print $2}' | xargs rm -v >> /home/analytics/reject_remove.log 2>&1
+
+# Backup statsdb_rails data
+0 0,12 * * * $STATSDB_HOME/bin/dw/backup_statsdb_rails >> /home/analytics/logs/backup_statsdb_rails.log
+
+# Copying data to production for API Gate.
+0 0,12 * * * cd /usr/wikia/backend/lib/Wikia/DW/ETL && perl _apiGateReplicator.pl >> /home/analytics/logs/apiGateReplicator.log 2>&1
+

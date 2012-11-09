@@ -1,0 +1,122 @@
+#!/usr/bin/perl -w
+
+use strict;
+
+use Getopt::Long;
+
+my ($datacenter, $list_roles, @role);
+GetOptions('datacenter|dc|c=s'  => \$datacenter,
+           'role|r=s'           => \@role,
+           'list-roles|roles:s' => \$list_roles,
+           'help|h|?'           => sub { help(); exit }
+          );
+          
+if (defined $list_roles) {
+    # If $list_roles is defined and has content, its a host name, otherwise
+    # just list all the roles
+    print join("\n", list_roles($list_roles))."\n";
+} else {
+	my @terms;
+	push @terms, 'roles:'.$datacenter if $datacenter;
+	push @terms, map { 'role:'.$_ } @role if @role;
+
+	print join("\n", list_nodes(@terms))."\n";
+}
+
+###############################################################################
+
+sub help {
+	my $prog = $0;
+	
+	$prog =~ s!^.+/!!;
+	
+	print qq{
+NAME
+
+	$prog [--datacenter DC]	[--role ROLE [--role ROLE ...]] [--list-roles [NODE_NAME] [--help]]
+
+DESCRIPTION
+
+	Return information about known roles and hosts (nodes).  A front end for 'knife'.
+
+ARGUMENTS
+	
+	--datacenter, --dc, -c DC
+		Given a datacetner name DC, return the nodes in that datacenter.
+	
+	--role, -r ROLE
+		Given a role ROLE, return the nodes in that role.  More than one --role argument can be passed.
+
+	--list-roles, --roles [NODE_NAME]
+		Given by itself, lists all known roles.  Given a node name NODE_NAME, lists all roles for that node.
+
+	--help, -h, -?
+		This help message.
+	
+};
+
+}
+
+sub list_roles {
+	my ($host) = @_;
+	
+	my @role;
+	if ($host) {
+		my $out = knife(node => 'show', $host, '-a roles');
+		return unless $out and ref $out;
+		
+    	foreach my $line (@$out) {
+    		next unless $line =~ /"([^"]+)"/;
+    		next if $1 eq 'roles';
+    		push @role, $1;
+    	}
+	} else {
+	    my $out = knife(role => 'list');
+    	return unless $out and ref $out;
+
+    	foreach my $line (@$out) {
+        	next unless $line =~ /"([^"]+)"/;
+        	push @role, $1;
+    	}
+	}
+
+    return @role;
+}
+
+sub list_nodes {
+    my (@terms) = @_;
+    
+    my @node;
+    if (@terms) {
+	    my $search_str = join(' AND ', @terms);
+
+    	my $out = knife(search => 'node', "'$search_str'", '-a hostname');
+    	return unless $out and ref $out;
+
+   		foreach my $line (@$out) {
+       		next unless $line =~ /"hostname": "([^"]+)"/;
+        	push @node, $1;
+    	}
+	} else {
+		my $out = knife(node => 'list');
+    	return unless $out and ref $out;
+
+   		foreach my $line (@$out) {
+       		next unless $line =~ /"([^"]+)"/;
+        	push @node, $1;
+    	}
+	}
+	
+    return @node;
+}
+
+sub knife {
+	my ($cmd, @args) = @_;
+	my $full_cmd = "knife $cmd ".join(' ', @args, '-F json');
+
+	open(PIPE, "$full_cmd|") or die "Can't open pipe from '$full_cmd': $!\n";
+	my @out = <PIPE>;
+	close(PIPE);
+	
+	return \@out;
+}

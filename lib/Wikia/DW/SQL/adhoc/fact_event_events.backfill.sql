@@ -1,0 +1,5 @@
+SELECT CONCAT('query2csv --source stats --query "SELECT ''event'' AS source, UNIX_TIMESTAMP(TIMESTAMP(rev_timestamp)) + (900 - UNIX_TIMESTAMP(TIMESTAMP(rev_timestamp)) % 900) AS file_id, rev_timestamp AS event_ts, CASE event_type WHEN 0 THEN ''create'' WHEN 1 THEN ''edit'' WHEN 2 THEN ''delete'' ELSE ''undelete'' END AS event_type, beacon_id AS beacon, wiki_id, user_id, page_ns AS namespace_id, page_id AS article_id, ip, is_content, is_redirect, user_is_bot, log_id, media_type, rev_id, rev_size, rev_timestamp, total_words, image_links, video_links, wiki_cat_id, wiki_lang_id FROM events WHERE rev_timestamp >= TIMESTAMP(''', begin_time, ''') AND rev_timestamp < TIMESTAMP(''', end_time, ''') ORDER BY rev_timestamp" > fact_event_events/', DATE_FORMAT(begin_time, '%Y/%m/%d/fact_event_events.15-'), UNIX_TIMESTAMP(TIMESTAMP(begin_time)) + (900 - UNIX_TIMESTAMP(TIMESTAMP(begin_time)) % 900), '.csv') AS stmt
+  FROM statsdb_etl.etl_period_times
+ WHERE period_id = 15
+   AND time_id >= '2004-01-01'
+   AND time_id <  '2012-01-01'

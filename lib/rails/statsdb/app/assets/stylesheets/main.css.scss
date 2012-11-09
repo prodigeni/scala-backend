@@ -1,0 +1,61 @@
+.clean-link {
+  text-decoration: none;
+  color: black;
+}
+
+.hidden {
+  display: none;
+}
+
+.note {
+  color: #777777;
+  padding-left: 5px;
+}
+
+#wa-container {
+  height: 100%;
+  width: 100%;
+}
+
+#wa-header {
+  background-color: #EEEEEE;
+  color: #000000;
+}
+
+#wa-header a {
+  color: #666666;
+  text-decoration: none;
+}
+
+#wa-header a.home {
+  color: #000000;
+  font-size: large;
+}
+
+#wa-header a:hover {
+  color: #000000;
+}
+
+#wa-header ul {
+  letter-spacing: 2px;
+  list-style-type: none;
+  margin: 0px;
+  padding: 0px;
+}
+
+#wa-header li {
+  display: inline;
+  line-height: 30px;
+  margin: 0px 10px 0px 10px;
+  padding: 0px;
+}
+
+#wa-body {
+  margin-top: 20px;
+  margin-left: 10px;
+  margin-right: 10px;
+}
+
+#wa-footer {
+}
+

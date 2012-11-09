@@ -1,0 +1,28 @@
+#!/usr/bin/env perl
+use common::sense;
+
+package Wikia::Maintenance::Example;
+
+use FindBin qw/$Bin/;
+use lib "$Bin/../lib";
+
+use Moose;
+with 'Wikia::Maintenance';
+
+
+#
+# this sub has to be defined for maintenance
+#
+# $self->current is current loop item which is wiki_id
+#
+sub execute {
+	my( $self ) = @_;
+	say "Current city id is " . $self->current;
+}
+1;
+
+#
+# run whole maintenance script
+#
+my $maintenance = Wikia::Maintenance::Example->new_with_options();
+$maintenance->run();

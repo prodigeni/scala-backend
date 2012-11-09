@@ -1,0 +1,236 @@
+#!/usr/bin/env perl
+
+package Wikia::RunMaintenance;
+
+use common::sense;
+
+use FindBin qw/$Bin/;
+use lib "$Bin/../lib";
+
+#
+# public libraries
+#
+use Cwd qw(abs_path);
+use IPC::Run qw( run );
+use Try::Tiny;
+use Parallel::ForkManager;
+use Getopt::Long qw(GetOptionsFromArray);
+use Text::ParseWords;
+
+#
+# private
+#
+use Wikia::WikiFactory::Iterator;
+use Wikia::Log;
+
+use Data::Dumper;
+use Moose;
+with 'MooseX::Getopt';
+
+use constant BASEPATH => "/usr/wikia/slot%d/code/maintenance/%s";
+use constant PHPBIN => "/usr/bin/php";
+use constant LOCALSETTINGS => "/usr/wikia/slot%d/docroot/LocalSettings.php";
+
+
+has id => (
+	is => 'rw',
+	default => sub{ [] },
+	isa => 'ArrayRef[Int]',
+	documentation => 'Identifier of wiki (city_id).'
+);
+
+has db => (
+	isa => 'ArrayRef',
+	is => 'rw',
+	default => sub { [] },
+	documentation => 'Database name of wiki.'
+);
+
+has exists => (
+	isa           => "Bool",
+	is            => "rw",
+	default       => 1,
+	documentation => "Check if executed script exists on disc. This is default behavior so use --noexists to switch off this flag."
+);
+
+has cluster => (
+	is            => 'rw',
+	isa           => 'ArrayRef[Str]',
+	default       => sub{ [] },
+	documentation => "Cluster name, possible values: c1, c2, c3, c4."
+);
+
+has slot => (
+	isa => 'ArrayRef',
+	is => 'rw',
+	default => sub { [] },
+	documentation => 'Source code slot for wiki. If not defined all slots will be used. Possible values: 1, 2, 3 etc.',
+);
+
+has lang => (
+	isa => 'ArrayRef[Str]',
+	is => 'rw',
+	default => sub{ [] },
+	documentation => 'Language of wiki (city_lang).'
+);
+
+has script => (
+	isa => 'Str',
+	is => 'rw',
+	required => 1,
+	documentation => 'Name of maintenance script. Name will be added to full slot path. This parameter is mandatory.'
+);
+
+has procs =>(
+	isa => 'Int',
+	is => 'rw',
+	default => 1,
+	documentation => "Number of proces to run. Default value is 1"
+);
+
+has active =>(
+	isa => 'Int',
+	is => 'rw',
+	default => 0,
+	documentation => "Run on wikis which are active at least <param> days"
+);
+
+has ip => (
+	isa => "Str",
+	is => "rw",
+	default => "",
+	documentation => "Overwrite IP path defined in medusa slot."
+);
+
+has conf => (
+	isa => "Str",
+	is => "rw",
+	default => "",
+	documentation => "Overwrite LocalSettings.php path defined in medusa slot."
+);
+
+has verbose => (
+	isa => "Bool",
+	is  => "rw",
+	default => 0,
+	documentation => "Be more verbose."
+);
+
+has where => (
+	isa           => "Str",
+	is            => "rw",
+	default       => "",
+	documentation => "Generic where condition against city_list table. For example --where='city_id > 200' will add 'AND city_id > 200' condition to condition lists."
+);
+
+has _args => (
+	is => 'rw',
+	documentation => 'Container for arguments used in script.'
+);
+
+has _script_name => (
+	isa           => 'Str',
+	is            => 'rw',
+	documentation => "Container for script name"
+);
+
+has log => (
+	isa           => 'Str',
+	is            => 'rw',
+	default       => sub{ "" },
+	documentation => "Log finish time"
+);
+
+sub find_script {
+	my( $self, $slot ) = @_;
+	my $path = undef;
+
+	if( $self->ip ne "" ) {
+		$path = $self->ip . "/" . $self->_script_name;
+	}
+	else {
+		$path = sprintf( BASEPATH, $slot, $self->_script_name);
+	}
+
+	if( defined $path && $self->exists ) {
+		unless( -f $path ) {
+			say "Requested file $path does not exists.";
+			exit ( 1 );
+		}
+		else {
+			$path = abs_path( $path );
+		}
+	}
+	$self->script( $path );
+}
+
+sub execute {
+	my( $self ) = @_;
+
+	my @args = parse_line( '\s+', 1, $self->script );
+	push @args, @{ $self->extra_argv() };
+	$self->_script_name(shift @args);
+	$self->_args( \@args );
+
+	my $iterator = Wikia::WikiFactory::Iterator->new(
+		city_cluster => $self->cluster,
+		city_lang    => $self->lang,
+		city_id      => $self->id,
+		slot         => $self->slot,
+		city_dbname  => $self->db,
+		active       => $self->active,
+		verbose      => $self->verbose,
+		slot         => $self->slot,
+		where        => $self->where
+	);
+
+	my $pm = undef;
+	$pm = Parallel::ForkManager->new( $self->procs ) if $self->procs;
+
+	while( my $city_id = $iterator->next ){
+		$pm->start and next if $self->procs;
+
+		#
+		# create WikiFactory handler for $city_id
+		#
+		my $wiki = Wikia::WikiFactory->new( city_id => $city_id );
+		$self->find_script( $wiki->slot );
+
+		my @cmd = ();
+		push @cmd, PHPBIN;
+		push @cmd, $self->script;
+		push @cmd, "--conf";
+
+		if( $self->conf ne "" ) {
+			push @cmd, sprintf( "%s", $self->conf );
+		}
+		else {
+			push @cmd, sprintf( LOCALSETTINGS, $wiki->slot );
+		}
+		push @cmd, @{ $self->_args };
+		say "Running " . join(' ', @cmd) ." for city_id=$city_id" if $self->verbose;
+
+		try {
+			$ENV{ "SERVER_ID"} = $city_id;
+			run \@cmd, \*STDIN, \*STDOUT, \*STDERR;
+		};
+
+		$pm->finish if $self->procs;
+	}
+
+	$pm->wait_all_children if $self->procs;
+
+	if( $self->log ne "" ) {
+		my $log = Wikia::Log->new( name => $self->log );
+		$log->update();
+	}
+}
+
+__PACKAGE__->meta->make_immutable;
+
+no Moose;
+1;
+
+$|++;
+my $maintenance = Wikia::RunMaintenance->new_with_options();
+$maintenance->execute();

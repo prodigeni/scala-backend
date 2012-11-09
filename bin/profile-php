@@ -1,0 +1,287 @@
+#!/usr/bin/perl -w
+
+=pod
+
+Create a table of the exclusive and inclusive call times of the functions called in the URL provided
+
+=cut
+
+use strict;
+
+use Getopt::Long;
+use Digest::MD5 qw(md5_hex);
+use LWP::Simple qw(get);
+use LWP::UserAgent;
+use URI::URL;
+
+
+my ($file, $url, $refresh, $limit, $sort, $proxy, $smart);
+GetOptions('file=s'  => \$file,
+		   'url=s'   => \$url,
+		   'refresh' => \$refresh,
+		   'limit=s' => \$limit,
+		   'sort=s'  => \$sort,
+		   'proxy=s' => \$proxy,
+		   'help|h'  => sub { help() && exit(0) }
+		  );
+
+if (!$url and !$file) {
+	my $prog = $0;
+	$prog =~ s!^.+/!!;
+
+	print STDERR "\n$prog: Must pass either --file or --url options\n";
+	help();
+	exit(1);
+}
+
+$limit ||= 20;
+$sort ||= 'exclusive';
+$sort = lc($sort);
+
+die "Unknown sort '$sort'.  Valid options are: exclusive, inclusive, calls\n"
+	unless $sort =~ /^(exclusive|inclusive|calls)$/;
+
+clear_trace($url) if $refresh;
+
+my $data = load_data($url, $file, $proxy);
+
+my %methods;
+my @stack;
+
+foreach my $line (@$data) {
+	# This is a function entry
+	if ($line =~ /^\s+([-\d\.]+)\s+>\s+(.+)/) {
+		my ($method) = $2;
+
+		# Remove memcached !HIT, !MISS text
+		$method =~ s/\s+!.+$//;
+
+		push @stack, $method;
+
+		$methods{$method} ||= {name      => $method,
+							   inclusive => 0,
+							   doublecounted => 0,
+							   callee    => 0,
+							   calls     => 0,
+							   depth     => 0};
+		$methods{$method}->{calls}++;
+		$methods{$method}->{depth}++;
+	}
+	# This is a function exit
+	elsif ($line =~ /^([\d\.]+)\s+([-\d\.]+)\s+<\s+(.+)/) {
+		my ($time, $method) = ($1, $3);
+
+		# Remove memcached !HIT, !MISS text
+		$method =~ s/\s+!.+$//;
+
+		my $cur_method = pop @stack;
+
+		# Check if there are no methods in the stack before trying to do anything
+		if (!$cur_method) {
+			warn "Stack empty\n";
+			next;
+		}
+
+		# Make sure the method popped off the stack is the one we just exited
+		if ($cur_method ne $method) {
+			warn "We exited a method we never entered!\n";
+			push @stack, $method;
+			next;
+		}
+
+		# Increase the inclusive time for this method
+		$methods{$method}->{inclusive} += $time;
+
+		# If we want to be smart we need to subtract this method call
+		# from the inclusive time of this method if we have calls
+		# to the same method
+		if ( $methods{$method}->{depth} != 1 ) {
+			$methods{$method}->{doublecounted} += $time;
+		}
+
+		# Decrease depth attribute from the current method
+		$methods{$method}->{depth}--;
+
+		# If there's a parent, increase its callee time.
+		my $caller = $stack[-1];
+		if ($caller) {
+			$methods{$caller}->{callee} += $time;
+		}
+	}
+	# We don't know what this is
+	else {
+		print STDERR "Unknown line: $line\n";
+	}
+}
+
+# Calculate the exclusive time and average both over number of calls.
+my $total = 0;
+foreach my $m (keys %methods) {
+	$methods{$m}->{exclusive} = ($methods{$m}->{inclusive} - $methods{$m}->{callee});
+	$total += $methods{$m}->{exclusive};
+	$methods{$m}->{inclusive} = ($methods{$m}->{inclusive} - $methods{$m}->{doublecounted});
+}
+
+print_report(\%methods, $total, $sort, $limit);
+
+################################################################################
+
+sub help {
+	my $prog = $0;
+	$prog =~ s!^.+/!!;
+
+	print qq{
+NAME
+	$prog
+
+SYNOPSIS
+	$prog [--url WIKIA_URL] [--file TRACE_FILE] [--limit NUM] [--sort SORT_TYPE] [--refresh] [--help]
+
+DESCRIPTION
+	This script prints out a table of profile data for the given url or trace file.  The output includes inclusive and exclusive call times and be sorted by both as well as by number of calls.
+
+OPTIONS
+	--url WIKIA_URL
+
+		Takes a URL for a wiki and produces a trace of the calls used to build it.  This or --file are required options.
+
+	--file TRACE_FILE
+
+		Takes a file containing just the profile output from a forcetrace=1 request.  Using the --url option is prefered.
+
+	--limit NUM
+
+		Only show the top NUM function calls
+
+	--sort SORT_TYPE
+
+		Sort the output by one of: inclusive, exclusive, calls.  If not given this defaults to 'exclusive'
+
+	--refresh
+
+		This tool caches the result of fetching data from the --url given.  To force this tool to re-fetch data, pass this option.
+
+	--help, -h
+
+		This help screen.
+
+}
+}
+
+sub load_data {
+	my ($url, $file, $proxy) = @_;
+
+	my @data;
+	if ($url) {
+		my $trace = cached_trace($url,$proxy);
+
+		if ($trace) { 
+			print "\n== Using cached trace data (use --refresh to fetch new data) ==\n"
+		} else {
+			my $orig_url = $url;
+			# Append the profile parameter
+			$url .= ($url =~ /\?/ ? '&' : '?').'forcetrace=1';
+
+			print STDERR "Loading trace ... ";
+			$trace = get_with_proxy($url,$proxy);
+			print STDERR "done\n";
+
+			# Delete everything but the trace at the end
+			$trace =~ s!^.+</html>!!s;
+
+			# Chop a bit more (doing two steps in the unlikely case that this string
+			# appears in the source text)
+			$trace =~ s!^.+Beginning trace:\s+\n!!s;
+
+			# Eliminate end bits
+			$trace =~ s!\s+-->$!!s;
+
+			store_trace($orig_url, $proxy, $trace);
+		}
+
+		@data = split("\n", $trace);
+	} elsif ($file) {
+		local $/ = undef;
+		open(FH, $file) or die "Can't open '$file': $!\n";
+		my $trace = <FH>;
+		close(FH);
+		@data = split("\n", $trace);
+	}
+
+	return \@data;
+}
+
+sub print_report {
+	my ($methods, $total, $sort, $limit) = @_;
+
+	my $idx = 1;
+	print "\n";
+	printf("Elapsed: %5.2f s\n", $total);
+	printf("%9s | %9s | %7s | %7s | %6s | %s\n", "Excl Time", "Incl Time", "% Excl", "% Incl", "Calls", "Method");
+
+	foreach my $m (sort { $methods->{$b}->{$sort} <=> $methods->{$a}->{$sort} } keys %$methods) {
+		my $info = $methods->{$m};
+		printf("%9.5f | %9.5f | %6.2f%% | %6.2f%% | %6s | %s\n",
+			   $info->{exclusive},
+			   $info->{inclusive},
+			   100*($info->{exclusive}/$total),
+			   100*($info->{inclusive}/$total),
+			   $info->{calls},
+			   $m
+			  );
+
+		last if $idx++ >= $limit;
+	}
+	print "\n";
+}
+
+sub cache_file {
+	my ($url, $proxy) = @_;
+	return'/tmp/'.md5_hex($url).( $proxy ? md5_hex($proxy) : '' ).'.trace';
+}
+
+sub cached_trace {
+	my ($url,$proxy) = @_;
+	my $file = cache_file($url,$proxy);
+
+	return unless -e $file;
+	open(my $jfh, $file) or die "Can't open '$file': $!\n";
+	local $/ = undef;
+	my $trace_data = <$jfh>;
+	close($jfh);
+	return $trace_data;
+}
+
+sub store_trace {
+	my ($url, $proxy, $trace) = @_;
+	my $file = cache_file($url,$proxy);
+
+	open(my $jfh, '>', $file) or die "Can't write '$file': $!\n";
+	print $jfh $trace;
+	close($jfh);
+}
+
+sub clear_trace {
+	my ($url) = @_;
+	my $file = cache_file($url,$proxy);
+	return unless -e $file;
+	unlink($file) or die "Can't remove '$file': $!\n";
+}
+
+sub get_with_proxy {
+	my ($url,$proxy) = @_;
+	my ($ua,$urlObj,$scheme);
+	$ua = new LWP::UserAgent;
+	if (defined $proxy) {
+		$urlObj = new URI::URL $url;
+		$scheme = $urlObj->scheme;
+		$ua->proxy($scheme, $proxy);
+	}
+	my $request = new HTTP::Request("GET", $url);
+	my $response = $ua->request($request);
+	if ($response->is_error) {
+		return undef;
+	}
+	return $response->content;
+}
+

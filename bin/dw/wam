@@ -1,0 +1,156 @@
+#!/usr/bin/perl -w
+
+use strict;
+
+use FindBin qw/$Bin/;
+use lib "$Bin/../../lib";
+
+use DateTime;
+use Getopt::Long;
+use Wikia::DW::Common;
+use Wikia::DW::ETL::Database;
+use Wikia::DW::ETL::Query;
+
+my $dt = DateTime->now()->subtract( days => 1 );
+my $time_id = $dt->ymd('-');
+
+GetOptions( 'time_id=s' => \$time_id );
+
+Wikia::DW::Common::log("Calculating WAM for: $time_id");
+
+my $fact_wam_inputs_sql = 
+"SELECT '$time_id' AS time_id,
+       sub.wiki_id,
+       IFNULL(sub.pageviews_28day,  0) AS pageviews_28day,
+       IFNULL(sub.pageviews_7day,   0) AS pageviews_7day,
+       IFNULL(SUM(creates + edits + deletes + undeletes), 0) AS edits_28day,
+       IFNULL(SUM(CASE WHEN e.time_id >= DATE_SUB(DATE('$time_id'), INTERVAL 7 DAY) THEN creates + edits + deletes + undeletes ELSE 0 END), 0) AS edits_7day,
+       IFNULL(COUNT(DISTINCT CASE WHEN creates + edits + deletes + undeletes > 0 THEN e.user_id ELSE null END), 0) AS editors_28day,
+       IFNULL(COUNT(DISTINCT CASE WHEN creates + edits + deletes + undeletes > 0 AND e.time_id >= DATE_SUB(DATE('$time_id'), INTERVAL 7 DAY) THEN e.user_id ELSE null END), 0) AS editors_7day,
+       IFNULL(sub.pageviews_28_to_15, 1) AS pageviews_28_to_15,
+       IFNULL(sub.pageviews_14_to_1,  1) AS pageviews_14_to_1,
+       IFNULL(sub.pageviews_8_to_5,   1) AS pageviews_8_to_5,
+       IFNULL(sub.pageviews_4_to_1,   1) AS pageviews_4_to_1
+  FROM (
+        SELECT w.wiki_id,
+               SUM(pv.pageviews) AS pageviews_28day,
+               SUM(CASE WHEN pv.time_id >= DATE_SUB(DATE('$time_id'), INTERVAL  7 DAY) THEN pv.pageviews ELSE 0 END) AS pageviews_7day,
+               SUM(CASE WHEN pv.time_id >= DATE_SUB(DATE('$time_id'), INTERVAL 28 DAY) AND pv.time_id <= DATE_SUB(DATE('$time_id'), INTERVAL 15 DAY) THEN pv.pageviews ELSE 0 END)+1 AS pageviews_28_to_15,
+               SUM(CASE WHEN pv.time_id >= DATE_SUB(DATE('$time_id'), INTERVAL 14 DAY) AND pv.time_id <= DATE_SUB(DATE('$time_id'), INTERVAL  1 DAY) THEN pv.pageviews ELSE 0 END)+1 AS pageviews_14_to_1,
+               SUM(CASE WHEN pv.time_id >= DATE_SUB(DATE('$time_id'), INTERVAL  8 DAY) AND pv.time_id <= DATE_SUB(DATE('$time_id'), INTERVAL  5 DAY) THEN pv.pageviews ELSE 0 END)+1 AS pageviews_8_to_5,
+               SUM(CASE WHEN pv.time_id >= DATE_SUB(DATE('$time_id'), INTERVAL  4 DAY) AND pv.time_id <= DATE_SUB(DATE('$time_id'), INTERVAL  1 DAY) THEN pv.pageviews ELSE 0 END)+1 AS pageviews_4_to_1
+          FROM dimension_top_wikis w
+          LEFT JOIN statsdb_mart.rollup_wiki_pageviews pv
+            ON pv.wiki_id = w.wiki_id
+           AND pv.period_id = 1
+           AND pv.time_id BETWEEN DATE_SUB(DATE('$time_id'), INTERVAL 28 DAY)
+                              AND DATE_SUB(DATE('$time_id'), INTERVAL  1 DAY)
+         WHERE w.rank <= 25000
+         GROUP BY w.wiki_id
+       ) sub
+  LEFT JOIN statsdb_mart.rollup_edit_events e
+    ON e.wiki_id = sub.wiki_id
+   AND e.period_id = 1
+   AND e.time_id BETWEEN DATE_SUB(DATE('$time_id'), INTERVAL 28 DAY)
+                     AND DATE_SUB(DATE('$time_id'), INTERVAL  1 DAY)
+ GROUP BY sub.wiki_id";
+
+$fact_wam_inputs_sql =~ s/\s+/ /g;
+
+Wikia::DW::Common::log("  deleting any pre-existing data in fact_wam_inputs");
+
+my $rc = system("psql -U statsdb -d statsdb_pg -c \"DELETE FROM fact_wam_inputs WHERE time_id = '$time_id'\" >> /dev/null");
+die "Couldn't DELETE data on postgres" if ($rc != 0);
+
+Wikia::DW::Common::log("  exporting and loading data into fact_wam_inputs");
+
+$rc = system("/usr/wikia/backend/bin/dw/query2csv --query \"$fact_wam_inputs_sql\" --format psql | psql -U statsdb -d statsdb_pg -c \"COPY fact_wam_inputs FROM STDIN WITH CSV NULL '\\N' HEADER QUOTE '\\\"' ESCAPE '\\'\"");
+die "Couldn't export and load into postgres" if ($rc != 0);
+
+my $fact_wam_scores_sql = 
+"SELECT avg_rank_sub.*,
+        ROUND(100 * (MAX(avg_rank_sub.avg_rank) OVER () - avg_rank_sub.avg_rank) / MAX(avg_rank) OVER (), 4)  AS wam,
+        RANK() OVER (ORDER BY avg_rank_sub.avg_rank, avg_rank_sub.pageviews_28day DESC, avg_rank_sub.wiki_id) AS wam_rank
+  FROM (
+        SELECT ranks_sub.*,
+               ROUND((2.0 * 2.0 * pageviews_28day_rank +
+                      2.0 * 3.0 * pageviews_7day_rank  +
+                            2.0 * edits_28day_rank     +
+                            3.0 * edits_7day_rank      +
+                            2.0 * editors_28day_rank   +
+                            3.0 * editors_7day_rank    +
+                           5.00 * growth_14day_rank::NUMERIC +
+                           5.00 * growth_4day_rank::NUMERIC   ) / 30.0, 4) AS avg_rank
+          FROM (
+                SELECT DATE(time_id) AS time_id,
+                       wiki_id,
+                       pageviews_28day,
+                       pageviews_7day,
+                       edits_28day,
+                       edits_7day,
+                       editors_28day,
+                       editors_7day,
+                       pageviews_28_to_15,
+                       pageviews_14_to_1,
+                       pageviews_8_to_5,
+                       pageviews_4_to_1,
+                       RANK() OVER (ORDER BY pageviews_28day DESC, pageviews_7day  DESC, wiki_id) AS pageviews_28day_rank,
+                       RANK() OVER (ORDER BY pageviews_7day DESC,  pageviews_28day DESC, wiki_id) AS pageviews_7day_rank,
+                       RANK() OVER (ORDER BY edits_28day DESC,     pageviews_28day DESC, wiki_id) AS edits_28day_rank,
+                       RANK() OVER (ORDER BY edits_7day DESC,      pageviews_28day DESC, wiki_id) AS edits_7day_rank,
+                       RANK() OVER (ORDER BY editors_28day DESC,   pageviews_28day DESC, wiki_id) AS editors_28day_rank,
+                       RANK() OVER (ORDER BY editors_7day DESC,    pageviews_28day DESC, wiki_id) AS editors_7day_rank,
+                       RANK() OVER (ORDER BY CASE WHEN FLOOR(LOG(4.0, pageviews_28_to_15)) >= 11 THEN 11
+                                                  WHEN FLOOR(LOG(4.0, pageviews_28_to_15)) <=  3 THEN  3
+                                                                                                 ELSE FLOOR(LOG(4.0, pageviews_28_to_15)) END DESC,
+                                             ((pageviews_14_to_1 - pageviews_28_to_15) / pageviews_28_to_15::FLOAT) DESC,
+                                             pageviews_28day DESC,
+                                             wiki_id) AS growth_14day_rank,
+                       RANK() OVER (ORDER BY CASE WHEN FLOOR(LOG(4.0, pageviews_8_to_5)) >= 10 THEN 10
+                                                  WHEN FLOOR(LOG(4.0, pageviews_8_to_5)) <=  3 THEN  3
+                                                                                               ELSE FLOOR(LOG(4.0, pageviews_8_to_5)) END DESC,
+                                             ((pageviews_4_to_1  - pageviews_8_to_5)   / pageviews_8_to_5::FLOAT  ) DESC,
+                                             pageviews_28day DESC,
+                                             wiki_id) AS growth_4day_rank
+                  FROM fact_wam_inputs
+                 WHERE time_id = '$time_id'
+               ) ranks_sub 
+         ORDER BY ROUND((2.0 * 2.0 * pageviews_28day_rank +
+                         2.0 * 3.0 * pageviews_7day_rank  +
+                               2.0 * edits_28day_rank     +
+                               3.0 * edits_7day_rank      +
+                               2.0 * editors_28day_rank   +
+                               3.0 * editors_7day_rank    +
+                              5.00 * growth_14day_rank::NUMERIC +
+                              5.00 * growth_4day_rank::NUMERIC   ) / 30.0, 4)
+         LIMIT 5000
+       ) avg_rank_sub";
+
+Wikia::DW::Common::log("  exporting calculated ranks and WAM scores");
+
+my $source      = Wikia::DW::ETL::Database->new( source => 'statsdb_pg' );
+my $destination = Wikia::DW::ETL::Database->new( source => 'statsdb_mart' );
+
+my $csv = "/data/tmpdir/fact_wam_scores.$time_id.csv";
+
+my $w = Wikia::DW::ETL::CSVWriter->new( filepath => $csv, format => 'Pg' );
+
+my $q = Wikia::DW::ETL::Query->new( database   => $source,
+                                    query      => $fact_wam_scores_sql,
+                                    processors => [ $w ] );
+
+$q->run;
+$q->finalize;
+
+Wikia::DW::Common::log("  loading calculated ranks and WAM scores");
+
+$destination->do( [
+    "DELETE FROM fact_wam_scores WHERE time_id = TIMESTAMP('$time_id')",
+    "LOAD DATA LOCAL INFILE '$csv' REPLACE INTO TABLE fact_wam_scores FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"' LINES TERMINATED BY '\n' IGNORE 1 LINES",
+    "COMMIT"
+] );
+
+$w->cleanup; # Remove the CSV file
+
+Wikia::DW::Common::log('Done');
+

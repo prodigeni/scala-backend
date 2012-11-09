@@ -1,0 +1,3 @@
+#!/bin/bash
+
+pr --merge --omit-header --separator=, $@

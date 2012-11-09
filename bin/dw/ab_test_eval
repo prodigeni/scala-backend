@@ -1,0 +1,114 @@
+#!/usr/bin/perl -w
+
+use strict;
+
+use FindBin qw/$Bin/;
+use lib "$Bin/../../lib";
+
+use DateTime;
+use Getopt::Long;
+use Wikia::DW::Common;
+
+my $experiment_id;
+my $begin;
+my $end;
+my $event_table = 'fact_pageview_events';
+my $event_where = '1=1';
+my $tmp_table_str;
+
+my $dt = DateTime->now();
+my $dt_str = $dt->ymd(''); # . $dt->hms('');
+
+GetOptions( 'experiment_id=i' => \$experiment_id,
+            'begin=s'         => \$begin,
+            'end=s'           => \$end,
+            'date=s'          => \$dt_str,
+            'event_table:s'   => \$event_table,
+            'event_where:s'   => \$event_where,
+            'tmp_table_str:s' => \$tmp_table_str );
+
+$dt_str =~ s/-//g;
+
+$tmp_table_str = $event_table unless $tmp_table_str;
+
+my $treatment_table = 'statsdb_tmp.' . $dt_str . '_' . $experiment_id . '_ab_treatments';
+
+my $event_tmp_table = 'statsdb_tmp.' . $dt_str . '_' . $experiment_id . '_' . $tmp_table_str;
+
+log_with_ts("Dropping tmp table");
+Wikia::DW::Common::statsdb_do("DROP TABLE IF EXISTS $event_tmp_table");
+
+log_with_ts("Creating tmp table");
+Wikia::DW::Common::statsdb_do(
+   "CREATE TABLE $event_tmp_table (
+        beacon    CHAR(10),
+        event_ts  DATETIME,
+        INDEX beacon_ts (beacon, event_ts)
+    ) ENGINE=InnoDB"
+);
+
+log_with_ts("Loading events into tmp table");
+
+my $statsdb = Wikia::DW::Common::statsdb;
+
+$statsdb->do('SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED');
+$statsdb->do('SET AUTOCOMMIT=1');
+
+$statsdb->do(
+   "INSERT INTO $event_tmp_table (
+        beacon,
+        event_ts
+    )
+    SELECT e.beacon,
+           e.event_ts
+      FROM $event_table e
+     WHERE e.event_ts >= TIMESTAMP('$begin')
+       AND e.event_ts <  TIMESTAMP('$end')
+       AND $event_where
+       AND EXISTS (SELECT 1 FROM $treatment_table t WHERE t.beacon = e.beacon)"
+);
+
+my $event_tmp_rollup = 'statsdb_tmp.' . $dt_str . '_' . $experiment_id . '_' . $tmp_table_str . '_rollup';
+
+log_with_ts("Dropping tmp rollup table");
+$statsdb->do("DROP TABLE IF EXISTS $event_tmp_rollup");
+
+log_with_ts("Creating tmp rollup table");
+$statsdb->do(
+   "CREATE TABLE $event_tmp_rollup (
+        beacon               CHAR(10),
+        treatment_group_id   SMALLINT UNSIGNED,
+        events               MEDIUMINT,
+        PRIMARY KEY (beacon, treatment_group_id, events)
+    ) ENGINE=InnoDB"
+);
+
+log_with_ts("Rolling up events");
+
+$statsdb->do(
+   "INSERT INTO $event_tmp_rollup (
+        beacon,
+        treatment_group_id,
+        events
+    )
+    SELECT t.beacon,
+           t.treatment_group_id,
+           IFNULL(COUNT(e.beacon),0) AS events
+      FROM $treatment_table t
+      LEFT JOIN $event_tmp_table e
+        ON e.beacon = t.beacon
+       AND e.event_ts >= t.start_time
+     GROUP BY t.beacon"
+);
+
+log_with_ts("Done");
+
+$statsdb->disconnect;
+
+sub log_with_ts {
+    my $msg = shift;
+    my $dt = `date`;
+    chomp($dt);
+    print "$dt : $msg\n";
+}
+

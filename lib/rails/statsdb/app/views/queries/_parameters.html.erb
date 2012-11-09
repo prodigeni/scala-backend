@@ -1,0 +1,30 @@
+<div id="query-parameters" class="form">
+<%= form_for query, :url => query_executions_path(query), :html => {:method => :post} do |f| %>
+  <table>
+    <thead>
+      <tr>
+        <td colspan="2"><b>Parameters:</b></td>
+      </tr>
+    </thead>
+    <tbody>
+    <% if parameters.length == 0 %>
+      <tr>
+        <td colspan="2" class="parameters-none">No parameters for this query.</td>
+      </tr>
+    <% else %>
+    <% parameters.sort do |a,b| a.first <=> b.first end.each do |param| %>
+      <tr class="parameters">
+        <td><%= label_tag "query[#{param.first}]", "#{param.first}:", :class => 'parameter-key' %></td>
+        <td><%= text_field_tag "query[#{param.first}]", (params["query"] && params["query"][param.first]) || param.last, :class => 'parameter-value' %></td>
+      </tr>
+    <% end %>
+    <% end %>
+      <tr>
+        <td colspan="2" class="parameters-run">
+          <%= submit_tag run_text %>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+<% end %>
+</div>

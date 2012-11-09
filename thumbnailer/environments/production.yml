@@ -1,0 +1,28 @@
+# configuration file for production environment
+
+# only log warning and error messsages
+log: "debug"
+
+# log message to a file in logs/
+logger: "console"
+
+# don't consider warnings critical
+warnings: 0
+
+# hide errors 
+show_errors: 1
+
+# cache route resolution for maximum performance
+route_cache: 1
+
+# wikia changes here:
+
+# - base path
+basepath: "/images"
+baseurl: "http://images.wikia.com"
+
+# - http proxy
+lwp_proxy: "http://10.8.38.29:80/"
+
+# - config type
+conf_env: "production"

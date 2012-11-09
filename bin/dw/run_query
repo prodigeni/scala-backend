@@ -1,0 +1,32 @@
+#!/usr/bin/perl -w
+
+use strict;
+
+use FindBin qw/$Bin/;
+use lib "$Bin/../../lib";
+
+use Getopt::Long;
+use Wikia::DW::Common;
+
+my $schema = 'statsdb';
+my $table;
+my $type;
+
+GetOptions( 'schema:s' => \$schema,
+            'table=s'  => \$table,
+            'type=s'   => \$type   );
+
+Wikia::DW::Common::log("Running $type query for table $table");
+
+my $sql = Wikia::DW::Common::load_query_file($table, $type);
+
+my @statements = split ';', $sql;
+
+push @statements, 'COMMIT';
+
+my $db = Wikia::DW::ETL::Database->new( source => $schema );
+
+$db->do( \@statements );
+
+Wikia::DW::Common::log('Done');
+

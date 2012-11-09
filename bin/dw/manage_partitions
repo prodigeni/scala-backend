@@ -1,0 +1,88 @@
+#!/usr/bin/perl -w
+
+use strict;
+
+use FindBin qw/$Bin/;
+use lib "$Bin/../../lib";
+
+use Wikia::DW::Common;
+use Wikia::DW::ETL::Base;
+
+use Getopt::Long;
+
+use Wikia::DW::Common;
+
+my ($tables, $debug);
+my $schema = 'statsdb';
+
+GetOptions( 'tables:s' => \$tables,
+            'schema:s' => \$schema,
+            'debug+'   => \$debug );
+
+if ($tables) {
+    for my $t (split /,/, $tables) {
+        manage_partitions($t);
+    }
+} else {
+    my $tables = Wikia::DW::Common::statsdb_arrvalue("SELECT DISTINCT table_name FROM information_schema.partitions WHERE table_schema = '$schema' AND (partition_name RLIKE 'p[0-9]{8}' OR partition_name = 'p0') ORDER BY table_name");
+    for my $t (@$tables) {
+        manage_partitions($t);
+    }
+}
+
+sub manage_partitions {
+    my $table = shift;
+
+    Wikia::DW::Common::log("Running manage_partitions for $table");
+
+    my $dbh = Wikia::DW::Common::statsdb;
+    $dbh->do("use $schema");
+
+    my $partition_create = $dbh->selectall_hashref(
+    "    SELECT CONCAT('p', DATE_FORMAT(d.dt, '%Y%m%d')) AS partition_name,
+               DATE_FORMAT(DATE_ADD(d.dt, INTERVAL 1 DAY), '%Y-%m-%d') AS end_date
+          FROM statsdb_etl.etl_dates d
+          LEFT JOIN information_schema.partitions p
+            ON p.table_schema = '$schema'
+           AND p.table_name = '$table'
+           AND p.partition_name = CONCAT('p', DATE_FORMAT(d.dt, '%Y%m%d'))
+         WHERE d.dt BETWEEN DATE_SUB(now(), INTERVAL 1024-14 DAY)
+                        AND DATE_ADD(now(), INTERVAL   14 DAY)
+           AND d.dt >= '2011-11-01'
+           AND p.partition_name IS NULL
+         ORDER BY d.dt",
+        'partition_name');
+
+    foreach my $p (sort keys %{$partition_create}) {
+        Wikia::DW::Common::log("    adding partition: $p");
+        eval {
+          $dbh->do("ALTER TABLE $schema.$table ADD PARTITION (PARTITION $p VALUES LESS THAN ('$partition_create->{$p}->{end_date}'))");
+        };
+        if (my $err = $@) {
+          Wikia::DW::Common::log('      unable to add partition');
+        }
+    }
+
+    my $partition_drop = $dbh->selectall_hashref(
+    "    SELECT p.partition_name
+          FROM information_schema.partitions p
+          LEFT JOIN statsdb_etl.etl_dates d
+            ON d.date_id = SUBSTRING(p.partition_name, 2)
+           AND d.dt BETWEEN DATE_SUB(now(), INTERVAL 1024-14 DAY)
+                        AND DATE_ADD(now(), INTERVAL 14 DAY)
+           AND d.dt >= '2011-11-01'
+         WHERE p.table_schema = '$schema'
+           AND p.table_name = '$table'
+           AND d.date_id IS NULL",
+        'partition_name');
+
+    foreach my $p (sort keys %{$partition_drop}) {
+        Wikia::DW::Common::log("    dropping partition: $p");
+        $dbh->do("ALTER TABLE $schema.$table DROP PARTITION $p");
+    }
+
+    $dbh->disconnect;
+}
+
+Wikia::DW::Common::log('Done');
+

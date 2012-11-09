@@ -1,0 +1,2 @@
+<%= @data["columns"].join(',') unless @data.nil? %>
+<%= @data["results"].map{|row| @data["columns"].map{|col| row[col] }.join(',')}.join("\n") unless @data.nil? %>

@@ -1,0 +1,55 @@
+// Place all the styles related to the QueryExecutions controller here.
+// They will automatically be included in application.css.
+// You can use Sass (SCSS) here: http://sass-lang.com/
+
+#query-execution-top-panel {
+  margin-top: 10px;
+  width: 100%;
+}
+
+#google-chart {
+    display: none;
+    float: left;
+    height: 280px;
+    padding-left: 10px;
+    width: 600px;
+}
+
+#google-chart-columns {
+    display: none;
+    float: left;
+    margin-left: 10px;
+    width: 300px;
+
+    ul {
+      height: 220px;
+      list-style: none;
+      -moz-column-width: 140px;
+      -moz-column-gap: 10px;
+      -webkit-column-width: 140px;
+      -webkit-column-gap: 10px;
+    }
+}
+
+#query-execution-results {
+  clear: both;
+  margin-top: 10px;
+  width: 100%;
+
+  #header {
+    clear: both;
+    height: 40px;
+    margin-top: 10px;
+    padding-top: 10px;
+    width: 100%;
+
+    #header-left {
+      float: left;
+    }
+
+    #header-right {
+      float: right;
+    }
+  }
+}
+

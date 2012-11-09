@@ -1,0 +1,179 @@
+#!/usr/bin/perl -w
+
+=pod
+
+=head1 NAME
+
+rt2fb - Export RT cases to FogBugz
+
+=head1 SYNOPSIS
+
+rt2fb --email EMAIL --pass PASS --file RT_EXPORT --project IMPORT_PROJECT
+
+=head1 DESCRIPTION
+
+Takes 
+
+=cut
+
+use strict;
+
+use LWP::Simple;
+use URI::Escape;
+use Getopt::Long;
+
+use constant RT_BASE_URI => 'https://rt.wikia-inc.com';
+use constant FB_API_URI  => 'https://wikia.fogbugz.com/api.asp';
+use constant FB_BASE_URI => 'https://wikia.fogbugz.com/default.asp';
+
+use constant DEF_EMAIL    => 'garth+importer@wikia-inc.com';
+use constant DEF_PASS     => 'testme';
+use constant DEF_PRIORITY => 3;
+
+use constant MAILBOX => 1;
+
+use constant COL_ID       => 0;
+use constant COL_SUBJ     => 2;
+use constant COL_STATUS   => 3;
+use constant COL_PRIORITY => 7;
+use constant COL_OWNER    => 9;
+use constant COL_EMAIL    => 10;
+
+# This is RT priority => FB priority
+use constant PRIORITY_MAP => {5 => 1,
+					          4 => 2,
+	 						  3 => 4,
+	 						  2 => 5,
+	 						  1 => 6};
+
+my ($email, $pass, $file, $project, $area, $rt_user, $rt_pass);
+GetOptions('email|e=s'   => \$email,
+           'pass|p=s'    => \$pass,
+           'rt_user=s'   => \$rt_user,
+           'rt_pass=s'   => \$rt_pass,
+           'file|f=s'    => \$file,
+           'project|j=s' => \$project,
+           'area|a=s'    => \$area,
+          );
+
+$email ||= DEF_EMAIL();
+$pass  ||= DEF_PASS();
+
+my $token = get_token($email, $pass);
+
+open(FH, $file) or die "Can't open file '$file': $!\n";
+
+# Read and ignore the header line
+my $header = <FH>;
+
+while (my $line = <FH>) {
+    my @d = split("\t", $line);
+
+    my $text = 'Imported from RT: https://rt.wikia-inc.com/Ticket/Display.html?id='.$d[COL_ID];
+	my $priority = $d[COL_PRIORITY()] || DEF_PRIORITY();
+
+    my $case_num = new_case(token    => $token,
+                            title    => $d[COL_SUBJ()],
+                            project  => $project,
+                            area     => $area,
+                            priority => PRIORITY_MAP->{$priority},
+                            email    => $d[COL_EMAIL()],
+                            mailbox  => MAILBOX(),
+                            text     => $text,
+                           );
+
+    if ($d[COL_STATUS()] !~ /new|open|stalled/) {
+        resolve_case(token => $token,
+                     case  => $case_num,
+                    ); 
+    }
+
+    print "Exported RT ".$d[COL_ID]." to FB $case_num\n";
+}
+close(FH);
+
+################################################################################
+
+sub resolve_case {
+    my (%param) = @_;
+
+    my $content = api_request(cmd   => 'resolve',
+                              token => $param{token},
+                              ixBug => $param{case},
+                             );
+}
+
+sub new_case {
+    my (%param) = @_;
+
+    my $content = api_request(cmd        => 'new',
+                              token      => $param{token},
+                              sTitle     => $param{title},
+                              sProject   => $param{project},
+                              sArea      => $param{area},
+                              ixPriority => $param{priority},
+                              ($param{email} ? (sCustomerEmail => $param{email}) : ()),
+                              ($param{email} ? (ixMailbox => $param{mailbox}) : ()),
+                              sEvent     => $param{text},
+                             );
+
+    if ($content =~ /<case ixBug="(\d+)"/) {
+        return $1;
+    } else {
+        die "Unknown response in create case: $content\n";
+    }
+}
+
+our $RT;
+sub get_rt_api {
+	unless ($RT) {
+		$RT = RT::Client::REST->new(server => RT_BASE_URI());
+		$RT->login(username => $rt_user,
+				   password => $rt_pass,
+				  ) or die "Can't login to RT\n";
+	}
+	
+	return $RT;
+}
+
+sub leave_forward_link {
+	my ($rt_ticket, $fb_case) = @_;
+	my $rt = get_rt_api();
+	
+	my $msg = "This ticket has been moved to FogBugz: ".FB_BASE_URI().'?'.$fb_case;
+	$rt->comment(ticket_id => $rt_ticket, message => $msg)
+}
+
+sub get_token {
+    my ($email, $pw) = @_;
+    my $token;
+
+    my $content = api_request(cmd      => 'logon',
+                              email    => $email,
+                              password => $pw);
+
+    if ($content =~ /CDATA\[([^\]]+)/) {
+        $token = $1;
+    } else {
+        die "Unknown response in request for token: $content\n";
+    }
+
+    return $token;
+}
+
+sub api_request {
+    my (%param) = @_;
+
+    my @qs = map { "$_=".uri_escape($param{$_})  } keys %param;
+    my $url = FB_API_URI().'?'.join('&', @qs);
+
+    my $ret = get($url);
+    die "Problem requesting '$url'\n" unless defined $ret;
+
+    if ($ret =~ /<error code="(\d+)">([^<]+)/) {
+        my ($code, $msg) = ($1, $2);
+        die "Failed command $param{cmd}: ($code) $msg\n";
+    }
+
+    return $ret;
+}

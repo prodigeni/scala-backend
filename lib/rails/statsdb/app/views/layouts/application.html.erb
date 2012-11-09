@@ -1,0 +1,29 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html>
+<head>
+  <title><%= 'Wikia Analytics' + (@title.nil? ? '' : " - #{@title}") %></title>
+  <%= stylesheet_link_tag    "application" %>
+  <%= javascript_include_tag "application" %>
+  <%= csrf_meta_tags %>
+  <script type="text/javascript" src="/js/ace.js"></script>
+  <script type="text/javascript" src="/js/mode-sql.js"></script>
+  <script type="text/javascript" src="/js/jquery-1.7.1.min.js"></script>
+  <script type="text/javascript" src="/js/jquery-ui-1.8.16.custom.min.js"></script>
+  <script type="text/javascript" src="/js/jquery.dataTables.js"></script>
+  <script type='text/javascript' src='https://www.google.com/jsapi'></script>
+</head>
+<body>
+<div id="wa-container">
+  <div id="wa-header">
+    <ul>
+      <li><a class="home" href="/">Wikia Analytics</a></li>
+      <li><a href="/queries">Queries</a></li>
+    </ul>
+  </div>
+  <div id="wa-body">
+<%= yield %>  </div>
+  <div id="wa-footer">
+  </div>
+</div>
+</body>
+</html>

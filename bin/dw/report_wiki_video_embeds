@@ -1,0 +1,45 @@
+#!/usr/bin/perl -w
+
+use strict;
+
+use FindBin qw/$Bin/;
+use lib "$Bin/../../lib";
+
+use DateTime;
+use Getopt::Long;
+use Wikia::DW::Common;
+
+my $dt = DateTime->now()->subtract( days => 1 );
+my $time_id = $dt->ymd('-');
+
+GetOptions( 'time_id=s' => \$time_id);
+
+Wikia::DW::Common::log("report_wiki_video_embeds: $time_id");
+
+my $statsdb = Wikia::DW::Common::statsdb;
+
+$statsdb->do("DELETE FROM report_wiki_video_embeds WHERE time_id = TIMESTAMP('$time_id')");
+
+$statsdb->do(
+"REPLACE INTO report_wiki_video_embeds (
+    time_id,
+    wiki_id,
+    articles,
+    total_embeds,
+    premium_embeds
+)
+SELECT '$time_id' AS time_id,
+       wiki_id,
+       COUNT(DISTINCT article_id) AS articles,
+       COUNT(1) AS total_embeds,
+       COUNT(CASE WHEN premium = 1 THEN 1 ELSE null END) AS premium_embeds
+  FROM dimension_wiki_embeds
+ GROUP BY wiki_id"
+);
+
+$statsdb->do('COMMIT');
+
+$statsdb->disconnect;
+
+Wikia::DW::Common::log('Done');
+

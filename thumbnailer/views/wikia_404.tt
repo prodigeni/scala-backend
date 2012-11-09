@@ -1,0 +1,5 @@
+<div style="padding:10px">
+<p>You tried to reach <strong><% path %></strong>, but it is unavailable.</p>
+Please try again or contact with Ops-Wikia or Backend-Wikia team.
+</p>
+</div>

@@ -1,0 +1,18 @@
+source 'http://rubygems.org'
+
+gem 'rails'
+gem 'mysql'
+gem 'pg'
+gem 'json'
+gem 'yajl-ruby', :require => 'yajl'
+gem 'jquery-rails'
+gem 'capistrano'
+gem 'execjs'
+gem 'therubyracer'
+
+group :assets do
+  gem 'sass-rails',   '~> 3.1.5'
+  gem 'coffee-rails', '~> 3.1.1'
+  gem 'uglifier',     '>= 1.0.3'
+end
+

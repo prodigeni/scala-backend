@@ -1,0 +1,32 @@
+    <h3><%= @query.name %></h3>
+    <div id="query-description">
+      <%= @query.description.html_safe %>
+    </div>
+<%= 
+  render :partial => 'parameters',
+    :locals => {
+      :query      => @query, 
+      :parameters => @parameters[@query.id],
+      :run_text   => 'Run Query'
+    }
+%>
+    <div id="query-executions">
+      <table>
+        <thead>
+          <tr>
+            <th class="completed">Completed</th>
+            <th class="parameters">Parameters</th>
+            <th class="duration">Duration (sec)</th>
+          </tr>
+        </thead>
+        <tbody>
+        <% @executions[@query.id].each do |query_execution| %>
+          <tr onclick="window.location='<%= query_execution_path(@query, query_execution) %>'">
+            <td class="completed"><%= link_to query_execution.finished_at, query_execution_path(@query, query_execution), :class => 'query-action' %></td>
+            <td class="parameters"><%= link_to query_execution.parameters.empty? ? '<none>' : query_execution.parameters.keys.sort.map { |k| "#{k} = #{query_execution.parameters[k]}".html_safe }.join(', '), query_execution_path(@query, query_execution), :class => 'query-action' %></td>
+            <td class="duration"><%= link_to (query_execution.finished_at-query_execution.started_at).to_f.round, query_execution_path(@query, query_execution), :class => 'query-action' %></td>
+          </tr>
+        <% end %>
+        </tbody>
+      </table>
+    </div>

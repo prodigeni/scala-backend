@@ -1,0 +1,13 @@
+#!/bin/sh
+
+# default values are for production servers
+# if you want to use them on localhost define environment variables
+# for example
+# export WIKIA_DB_YML="/srv/web/wikia-conf/DB.localhost.yml"
+# export WIKIA_UTILS_HOME="/srv/web/wikia-utils"
+
+HOME="${WIKIA_UTILS_HOME:-/usr/wikia/backend}/bin"
+CONF=${WIKIA_DB_YML:-/usr/wikia/conf/current/DB.yml}
+MYSQL=`which mysql`
+PARAMS=`$HOME/dbparams.pl --conf=$CONF --type=master --name=$*`
+$MYSQL $PARAMS -A

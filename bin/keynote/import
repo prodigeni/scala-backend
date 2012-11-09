@@ -1,0 +1,646 @@
+#!/usr/bin/perl -w
+
+=pod
+
+=head NAME
+
+import
+
+=head DESCRIPTION
+
+Script to import data from keynote via its API
+
+=cut
+
+# TXN_DATA_FEED
+
+# # TXN_META_DATA
+# # # AGENT_META_DATA
+# # # SLOT_META_DATA
+# # # # PAGE_META_DATA
+
+# # DP_TXN_MEASUREMENTS
+# # # TXN_MEASUREMENT
+# # # # TXN_SUMMARY
+# # # # TXN_PAGE
+# # # # # TXN_PAGE_PERFORMANCE
+# # # # # TXN_PAGE_OBJECT
+# # # # # TXN_PAGE_STATUS
+# # # # # TXN_PAGE_DETAILS
+# # # # # # TXN_BASE_PAGE
+# # # # # # # TXN_DETAIL_PERFORMANCE
+# # # # # # # TXN_DETAIL_OBJECT
+# # # # # # # TXN_DETAIL_STATUS
+# # # # # # TXN_PAGE_ELEMENT
+# # # # # # # TXN_DETAIL_PERFORMANCE
+# # # # # # # TXN_DETAIL_OBJECT
+# # # # # # # TXN_DETAIL_STATUS
+
+use FindBin qw/$Bin/;
+use lib "$Bin/../../lib";
+
+use XML::LibXML;
+use Storable;
+
+use Getopt::Long;
+use Time::Local;
+use LWP;
+
+use Wikia::DW::Common;
+use Wikia::DW::ETL::CSVWriter;
+use Wikia::Settings;
+
+use constant KEYNOTE_ACCT  => 226053;
+use constant KEYNOTE_PASS  => 'E8WSWYBX';
+use constant KEYNOTE_FEED  => 'http://datafeed.keynote.com/private/226053/trans/xml/latest';
+use constant KEYNOTE_REALM => 'Restricted Files';
+
+use constant DUP_FILE => '/tmp/dups.dat';
+
+our $MEMC;
+our $DUPS;
+our $SKIPPED = 0;
+
+GetOptions(
+
+);
+my (@files) = @ARGV;
+
+if (-e '/tmp/dups.dat') {
+	$DUPS = Storable::retrieve(DUP_FILE());
+}
+$DUPS ||= {};
+
+
+if (@files) {
+#	foreach my $f (@files) {
+#		die "File '$file' doesn't exist\n" unless -e $f;
+#		if (file_loaded($f)) {
+#		
+#		}
+#	}
+} else {
+	@files = find_new_files();
+}
+
+foreach my $f (@files) {
+	my $zip_file = "/tmp/$f";
+
+	if ($f =~ /\.zip$/) {
+		$xml_file = "/tmp/$f";
+		$xml_file =~ s/\.zip$/\.xml/;
+
+		unless (-e "/tmp/$f") {
+			my $zipped = fetch(KEYNOTE_FEED().'/'.$f);
+
+			open(TMP, "> /tmp/$f") or die "Can't write to '/tmp/$f': $!\n";
+			print TMP $$zipped;
+			close(TMP);
+		}
+		unless (-e $xml_file) {
+			system("unzip -q -d /tmp -o /tmp/$f");
+		}
+		$f = $xml_file;
+	}
+
+	print STDERR "Processing $f\n";
+	my $data = read_file($f);
+	write_csv($data);
+	load_csv($data);
+
+	mark_loaded($data);
+
+	unlink($zip_file) if -e $zip_file;
+	unlink($f) if -e $f;
+}
+
+print STDERR "Skipped $SKIPPED duplicate measurements\n";
+
+################################################################################
+
+sub unpack_xml {
+	my $xml_file = "/tmp/$f";
+	$xml_file =~ s/\.zip$/\.xml/;
+
+	my $zipped = fetch(KEYNOTE_FEED().'/'.$f);
+
+	open(TMP, "> /tmp/$f") or die "Can't write to '/tmp/$f': $!\n";
+	print TMP $$zipped;
+	close(TMP);
+	system("unzip -q -d /tmp -o /tmp/$f");
+
+	return $xml_file;
+}
+
+sub file_name_to_id {
+	my ($file) = @_;
+	my ($Y, $M, $D, $h, $m) = $file =~ /(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})/;
+	return timelocal(0, $m, $h, $D, $M-1, $Y);
+}
+
+sub file_id_to_name {
+	my ($id) = @_;
+	my ($s, $m, $h, $D, $M, $Y) = localtime($id);
+
+	return sprintf('%04d%02d%02d_%02d%02d', $Y+1900, $M+1, $D, $h, $m);
+}
+
+sub fetch_dimension_meta {
+	my ($data) = @_;
+
+	my $dbh = Wikia::DW::Common::statsdb();
+	my $rows = $dbh->selectall_arrayref(qq(select agent_id, instance_id
+										   from dimension_kn_agent_instance));
+	$dbh->disonnect;
+	
+	foreach my $r (@$rows) {
+		my ($agent_id, $instance_id) = (@$r);
+		$data->{meta}->{agent}->{$agent_id}->{$instance_id} = 1;
+	}
+
+	$rows = $dbh->selectall_arrayref(qq(select slot_id, page_seq
+										from dimension_kn_page));
+
+	foreach my $r (@$rows) {
+		my ($slot_id, $page_seq) = (@$r);
+		$data->{meta}->{slot}->{$slot_id}->{$page_seq} = 1;
+	}
+}
+
+sub find_new_files {
+	# Grab a list of currently available zipped XML files
+	my $list = fetch(KEYNOTE_FEED().'/list');
+	die "Did not get a list of files back from Keynote\n" unless $list;
+
+	my %files = map { file_name_to_id($_) => $_ } split("\n", $$list);
+
+	# SQL to select any files from this list we've already loaded
+	my $in_clause = join(',', keys %files);
+	my $sql = "SELECT file_id FROM etl_kn_file_loads WHERE file_id IN ($in_clause)";
+
+	my $dbh = Wikia::DW::Common::statsdb('statsdb_etl');
+	my $result = $dbh->selectall_arrayref($sql);
+	$dbh->disconnect;
+
+	my %loaded = map { $_->[0] => 1 } @$result;
+
+	# Find new files, using %loaded to skip the ones already in the DB
+	my @new_files;
+	foreach my $fid (keys %files) {
+		next if $loaded{$fid};
+		push @new_files, $files{$fid};
+	}
+
+	return @new_files;
+}
+
+sub mark_loaded {
+	my ($data) = @_;
+	my $file_id = $data->{file_id};
+	my $max = $data->{stats}->{datemax};
+	my $min = $data->{stats}->{datemin};
+
+	my $dbh = Wikia::DW::Common::statsdb('statsdb_etl');
+	my $sql = qq{INSERT INTO etl_kn_file_loads
+	             (file_id, min_event_ts, max_event_ts)
+	             VALUES
+	             ($file_id, '$min', '$max')};
+	$dbh->do($sql);
+
+	$dbh->commit;
+	$dbh->disconnect;
+}
+
+sub fetch {
+	my ($url) = @_;
+	my ($is_ssl, $host) = $url =~ m!^http(s?)://([^/]+)!;
+	my $port = $is_ssl ? '443' : '80';
+
+	my $ua = LWP::UserAgent->new;
+	$ua->agent("Wikia/0.1 ");
+	$ua->credentials("$host:$port", KEYNOTE_REALM(), KEYNOTE_ACCT(), KEYNOTE_PASS());
+	$ua->env_proxy;
+
+	# Create a request
+	my $req = HTTP::Request->new(GET => $url);
+
+	# Pass request to the user agent and get a response back
+	my $res = $ua->request($req);
+
+	# Check the outcome of the response
+	if ($res->is_success) {
+		return \($res->content);
+	} else {
+		print STDERR "Fetch failed: ".$res->status_line."\n";
+		return;
+	}
+}
+
+sub read_file {
+	my ($file) = @_;
+	my $file_id = file_name_to_id($file);
+
+	$p = XML::LibXML->new;
+	$d = $p->parse_file($file);
+	die "Failed to parse file '$file'; quitting\n" unless $d;
+
+	# The top level contains elements:
+	# * TXN_META_DATA
+	# * DP_TXN_MEASUREMENTS
+
+	my $data = {file_id => $file_id};
+	my $txn_data_feed = $d->firstChild;
+
+	foreach my $n ($txn_data_feed->childNodes) {
+		if (lc($n->nodeName) eq 'txn_meta_data') {
+			read_txn_meta_data($n, $data);
+		} elsif (lc($n->nodeName) eq 'dp_txn_measurements') {
+			read_dp_txn_measurements($n, $data);
+		}
+	}
+
+	return $data;
+}
+
+sub write_csv {
+	my ($data) = @_;
+	my $file_id = $data->{file_id};
+	my @csv_files;
+
+	foreach my $table (qw(dimension_kn_agent
+						  dimension_kn_agent_instance
+						  dimension_kn_slot
+						  dimension_kn_page
+						  fact_kn_measurement
+						  fact_kn_measurement_page
+						  fact_kn_page)) {
+		my $file = "/tmp/$table-$file_id.csv";
+		my $writer = Wikia::DW::ETL::CSVWriter->new(filepath => $file);
+		my $rows = $data->{$table};
+
+		if ($table eq 'dimension_kn_agent') {
+			$rows = [values %{$data->{$table}}];
+		}
+
+		$writer->process({columns => [keys %{$rows->[0]}],
+							  rows    => $rows,
+							 });
+		$writer->finalize;
+
+		$data->{files}->{$file} = $table;
+	}
+}
+
+sub load_csv {
+	my ($data) = @_;
+
+	my $dbh = Wikia::DW::Common::statsdb();
+
+	foreach my $f (keys %{$data->{files}}) {
+		print STDERR "-- Loading data from file '$f' ... ";
+
+		# Grab the column names as a hint for LOAD DATA
+		my $cols = `head -1 $f`;
+		chomp($cols);
+
+		my $table = $data->{files}->{$f};
+
+		my $sql = qq{LOAD DATA LOCAL INFILE '$f'
+					 INTO TABLE $table
+					 FIELDS TERMINATED BY ','
+					 OPTIONALLY ENCLOSED BY '"'
+					 LINES TERMINATED BY '\n'
+					 IGNORE 1 LINES
+					 ($cols)
+					};
+		my $loaded = $dbh->do($sql);
+		$loaded = 0 if $loaded eq '0E0';
+
+		print STDERR "$loaded row(s) loaded\n";
+
+		$dbh->commit;
+		unlink($f);
+	}
+
+	$dbh->disconnect;
+}
+
+sub read_txn_meta_data {
+	my ($node, $data) = @_;
+
+	# Element TXN_META_DATA contains elements:
+	# * AGENT_META_DATA
+	# * SLOT_META_DATA
+
+	foreach my $n ($node->childNodes) {
+		if (lc($n->nodeName) eq 'agent_meta_data') {
+			read_agent_meta_data($n, $data);
+		} elsif (lc($n->nodeName) eq 'slot_meta_data') {
+			read_slot_meta_data($n, $data);
+		}
+	}
+}
+
+sub read_agent_meta_data {
+	my ($node, $data) = @_;
+	my %attr = map { $_->getName => $_->getValue } $node->attributes;
+	my (%instance);
+
+	# Get the agent ID and exit now if its already in the DB
+	my $agent_id = $attr{agent_id};
+	return if exists $data->{meta}->{agent}->{$agent_id};
+
+	# Store this by agent ID to dedupe
+	$agent = $data->{dimension_kn_agent}->{$agent_id} ||= {};
+
+	# Create a row for the dimension_kn_agent table
+	foreach my $p (qw(agent_id backbone weight country region city description)) {
+		$agent->{$p} = $attr{$p};
+	}
+
+	# Create a row for the dimension_kn_agent_instance table
+	foreach my $p (qw(agent_id instance_id ip)) {
+		$instance{$p} = $attr{$p};
+	}
+
+	$data->{dimension_kn_agent_instance} ||= [];
+	push @{$data->{dimension_kn_agent_instance}}, \%instance;
+}
+
+sub read_slot_meta_data {
+	my ($node, $data) = @_;
+	my %attr = map { $_->getName => $_->getValue } $node->attributes;
+	my %slot;
+
+	# Only add the slot if its not already in the DB
+	my $slot_id = $attr{slot_id};
+	if (not exists $data->{meta}->{slot}->{$slot_id}) {
+
+		# Create a row for the dimension_kn_slot table
+		foreach my $p (qw(slot_id slot_alias pages subservice)) {
+			$slot{$p} = $attr{$p};
+		}
+
+		$data->{dimension_kn_slot} ||= [];
+		push @{$data->{dimension_kn_slot}}, \%slot;
+	}
+
+	foreach my $n ($node->childNodes) {
+		next if $n->nodeName eq '#text';
+		read_page_meta_data($n, $data, $attr{slot_id});
+	}
+
+}
+
+sub read_page_meta_data {
+	my ($node, $data, $slot_id) = @_;
+	my %attr = map { $_->getName => $_->getValue } $node->attributes;
+	my %page;
+
+	# Don't add this sequence if it already exists in the DB
+	my ($page_seq) = $attr{page_seq};
+	return if exists $data->{meta}->{slot}->{$slot_id}->{$page_seq};
+
+	# Create a new row for the dimension_kn_page table
+	foreach my $p (qw(page_seq page_url page_alias)) {
+		$page{$p} = $attr{$p};
+	}
+	$page{slot_id} = $slot_id;
+
+	$data->{dimension_kn_page} ||= [];
+	push @{$data->{dimension_kn_page}}, \%page;
+}
+
+sub read_dp_txn_measurements {
+	my ($node, $data) = @_;
+	
+	foreach my $n ($node->childNodes) {
+		next if $n->nodeName eq '#text';
+		read_txn_measurement($n, $data);
+	}
+}
+
+BEGIN {
+	our $MEASUREMENT_CNTR = 0;
+}
+use constant MONTHS => {jan => '01', feb => '02', mar => '03', apr => '04',
+						may => '05', jun => '06', jul => '07', aug => '08',
+						sep => '09', oct => '10', nov => '11', dec => '12'};
+
+sub read_txn_measurement {
+	my ($node, $data) = @_;
+	my %attr = map { $_->getName => $_->getValue } $node->attributes;
+	my %measurement;
+
+	# Keynote includes duplicate measurements between files most of the time.
+	# Filter these out here.
+	return if duplicate_measurement(\%attr);
+
+	my $pk = sprintf('%10d%05d', time, $MEASUREMENT_CNTR++);
+
+	# Create a new row for the fact_kn_measurement table
+	foreach my $p (qw(target profile)) {
+		$measurement{$p} = $attr{$p};
+	}
+	$measurement{agent_id}       = $attr{agent};
+	$measurement{instance_id}    = $attr{agent_inst};
+	$measurement{slot_id}        = $attr{slot};
+	$measurement{file_id}        = $data->{file_id};
+	$measurement{measurement_id} = $pk;	
+	$measurement{created}        = $attr{datetime};
+
+	# Replace the 3 character month abreviation with a number
+	$measurement{created} =~ s/^(\d{4}-)([^-]+)/$1.MONTHS()->{lc($2)}/e;
+
+	# Keep track of the min and max dates we've found
+	$data->{stats}->{datemax} = $measurement{created}
+		if !$data->{stats}->{datemax} or
+		   ($data->{stats}->{datemax} lt $measurement{created});
+
+	$data->{stats}->{datemin} = $measurement{created}
+		if !$data->{stats}->{datemin} or
+		   ($data->{stats}->{datemin} gt $measurement{created});
+
+	foreach my $n ($node->childNodes) {
+		if (lc($n->nodeName) eq 'txn_summary') {
+			read_txn_summary($n, \%measurement);
+		} elsif (lc($n->nodeName) eq 'txn_page') {
+			read_txn_page($n, $data, $pk, $attr{slot});
+		}
+	}
+
+	$data->{fact_kn_measurement} ||= [];
+	push @{$data->{fact_kn_measurement}}, \%measurement;
+}
+
+sub duplicate_measurement {
+	my ($attr) = @_;
+	my $key = join('-', $attr->{datetime}, $attr->{slot}, $attr->{agent});
+
+	if ($DUPS->{$key}) {
+		$SKIPPED++;
+		return 1;
+	}
+
+	$DUPS->{$key} = time;
+	return 0;
+}
+
+END {
+	my $ttl = time - 60*60*2;
+	foreach my $key (keys %$DUPS) {
+		# Keep this key if its newer than the TTL
+		next if $DUPS->{$key} > $ttl;
+
+		# Delete old keys
+		delete $DUPS->{$key};
+	}
+
+	Storable::store($DUPS, DUP_FILE());
+}
+
+sub read_txn_summary {
+	my ($node, $measurement) = @_;
+	my %attr = map { $_->getName => $_->getValue } $node->attributes;
+
+	foreach my $p (qw(privacy_cookies_count domain_count element_count
+					  content_errors connection_count)) {
+		$measurement->{$p} = $attr{$p};
+	}
+
+	# These are mapped to different column names
+	$measurement->{bandwidth}             = $attr{bandwidth_kbsec};
+	$measurement->{delta}                 = $attr{delta_msec};
+	$measurement->{cache_delta}           = $attr{estimated_cache_delta_msec};
+	$measurement->{delta_user}            = $attr{delta_user_msec};
+	$measurement->{bytes}                 = $attr{resp_bytes};
+}
+
+sub read_txn_page {
+	my ($node, $data, $measurement_id, $slot_id) = @_;
+	my %attr = map { $_->getName => $_->getValue } $node->attributes;
+	my %measurement_page;
+
+	$measurement_page{measurement_id} = $measurement_id;
+	$measurement_page{page_seq}       = $attr{page_seq};
+	$measurement_page{file_id}        = $data->{file_id};
+
+	foreach my $n ($node->childNodes) {
+		if (lc($n->nodeName) eq 'txn_page_performance') {
+			read_txn_page_performance($n, \%measurement_page);
+		} elsif (lc($n->nodeName) eq 'txn_page_object') {
+			read_txn_page_object($n, \%measurement_page);
+		} elsif (lc($n->nodeName) eq 'txn_page_status') {
+			read_txn_page_status($n, \%measurement_page);
+		} elsif (lc($n->nodeName) eq 'txn_page_details') {
+			read_txn_page_details($n, $data, \%measurement_page, $slot_id);
+		}
+	}
+
+	$data->{fact_kn_measurement_page} ||= [];
+	push @{$data->{fact_kn_measurement_page}}, \%measurement_page;
+}
+
+sub read_txn_page_performance {
+	my ($node, $measurement_page) = @_;
+	my %attr = map { $_->getName => $_->getValue } $node->attributes;
+
+	foreach my $p (qw(connection_count first_packet_delta domain_count connect_delta
+					  remain_packets_delta system_delta request_delta dom_load_time
+					  dom_content_load_time privacy_cookies_count)) {
+		$measurement_page->{$p} = $attr{$p};
+	}
+	
+	# These are mapped to different column names
+	$measurement_page->{delta}           = $attr{delta_msec};
+	$measurement_page->{delta_user}      = $attr{delta_user_msec};
+	$measurement_page->{start_time}      = $attr{start_msec};
+	$measurement_page->{dns_lookup}      = $attr{dns_lookup_msec};
+	$measurement_page->{first_byte}      = $attr{first_byte_msec};
+	$measurement_page->{bandwidth}       = $attr{bandwidth_kbsec};
+	$measurement_page->{cache_delta}     = $attr{estimated_cache_delta_msec};
+	$measurement_page->{dom_complete}    = $attr{dom_complete_msec};
+	$measurement_page->{dom_interactive} = $attr{dom_interactive_msec};
+	$measurement_page->{ms_first_paint}  = $attr{ms_first_paint_msec};
+}
+
+sub read_txn_page_object {
+	my ($node, $measurement_page) = @_;
+	my %attr = map { $_->getName => $_->getValue } $node->attributes;
+
+	$measurement_page->{element_count} = $attr{element_count};
+	$measurement_page->{page_bytes}    = $attr{page_bytes};
+}
+
+sub read_txn_page_status {
+	my ($node, $measurement_page) = @_;
+	my %attr = map { $_->getName => $_->getValue } $node->attributes;
+
+	$measurement_page->{content_errors} = $attr{content_errors};
+}
+
+sub read_txn_page_details {
+	my ($node, $data, $measurement_page, $slot_id) = @_;
+	my %attr = map { $_->getName => $_->getValue } $node->attributes;
+
+	foreach my $n ($node->childNodes) {
+		next if $n->nodeName eq '#text';
+		read_txn_page_element($n, $data, $measurement_page, $attr{page}, $slot_id);
+	}
+}
+
+sub read_txn_page_element {
+	my ($node, $data, $measurement_page, $page, $slot_id) = @_;
+	my %attr = map { $_->getName => $_->getValue } $node->attributes;
+
+	my $detail = {measurement_id => $measurement_page->{measurement_id},
+				  page_seq       => $measurement_page->{page_seq},
+				  slot_id        => $slot_id,
+				  record_seq     => $attr{record_seq},
+				  file_id        => $data->{file_id},
+				  page           => $page,
+				 };
+
+	foreach my $n ($node->childNodes) {
+		if (lc($n->nodeName) eq 'txn_detail_performance') {
+			read_txn_detail_performance($n, $detail);
+		} elsif (lc($n->nodeName) eq 'txn_detail_object') {
+			read_txn_detail_object($n, $detail);
+		} elsif (lc($n->nodeName) eq 'txn_detail_status') {
+			read_txn_detail_status($n, $detail);
+		}
+	}
+
+	$data->{fact_kn_page} ||= [];
+	push @{$data->{fact_kn_page}}, $detail;
+}
+
+sub read_txn_detail_performance {
+	my ($node, $detail) = @_;
+	my %attr = map { $_->getName => $_->getValue } $node->attributes;
+
+	foreach my $p (qw(first_packet_delta system_delta connect_delta request_delta
+					  dns_delta element_delta remain_packets_delta)) {
+		$detail->{$p} = $attr{$p};
+	}
+
+	# These are mapped to different column names
+	$detail->{start} = $attr{start_msec};
+}
+
+sub read_txn_detail_object {
+	my ($node, $detail) = @_;
+	my %attr = map { $_->getName => $_->getValue } $node->attributes;
+
+	foreach my $p (qw(msmt_conn_id element_cached request_bytes conn_string_text content_type
+					  header_code header_bytes ip_address object_text content_bytes)) {
+		$detail->{$p} = $attr{$p};				  
+	}
+}
+
+sub read_txn_detail_status {
+	my ($node, $detail) = @_;
+	my %attr = map { $_->getName => $_->getValue } $node->attributes;
+
+	$detail->{status_code} = $attr{status_code};
+}

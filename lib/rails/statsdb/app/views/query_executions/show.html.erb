@@ -1,0 +1,116 @@
+<h3><%= link_to @query.name, @query, :class => 'clean-link' %></h3>
+<%= @query_execution.parameters.empty? ? 'No parameters for this query.' : @query_execution.parameters.keys.sort.map { |k| "#{k} = #{@query_execution.parameters[k]}".html_safe }.join(', ') %>
+<div id="query-execution-top-panel">
+  <div id="google-chart"></div>
+  <div id="google-chart-columns">
+    <ul>
+      <% @data['columns'].each_with_index.map do |col, i| %>
+        <% if @data['types'][i] == 'number' %>
+          <li><input class="google-chart-column-item" type="checkbox" name="<%= col.html_safe %>" value="<%= i %>" checked><%= col.html_safe %></i></li>
+        <% end %>
+      <% end %>
+    </ul>
+  </div>
+</div>
+<div id="query-execution-results">
+  <div id="header">
+    <div id="header-left">
+      <% if @query_execution.started_at %>
+        Results from <%= @query_execution.started_at.strftime("%A, %b %d at %I:%M %p") %> (<%= @data['results'].size %> rows)
+      <% end %>
+    </div>
+    <div id="header-right">
+        <button onclick="window.location='<%= query_execution_path(@query, @query_execution, :refresh => 1) %>'">Refresh Results</button>
+        <button onclick="window.location='<%= query_execution_path(@query, @query_execution, :format => 'csv') %>'">Export CSV</button>
+    </div>
+  </div>
+  <div id='google-table'></div>
+</div>
+<script type='text/javascript'>
+  google.load('visualization', '1', {packages:['table','annotatedtimeline']});
+  google.setOnLoadCallback(drawTable);
+  var localTimezone  = (new Date().getTimezoneOffset()) / 60;
+  function parseDateTime (dt) {
+    if (dt.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      dt = dt + " 00:00:00";
+    }
+  
+    var dtRegex = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})/;
+  
+    var elements = dt.match(dtRegex);
+    var date_part = elements[1];
+    var time_part = elements[2];
+  
+    var date_value = $.datepicker.parseDate('yy-mm-dd', date_part)
+  
+    var hmsRegex = /^(\d{2}):(\d{2}):(\d{2})$/;
+    var hms = time_part.match(hmsRegex);
+  
+    date_value.setHours(hms[1], hms[2], hms[3]);
+  
+    return date_value;
+  }
+  function drawTable() {
+    var dt = new google.visualization.DataTable();
+
+<%= @data['columns'].each_with_index.map do |col, i|
+"    dt.addColumn( '#{@data['types'][i]}', '#{col}' );"
+end.join("\n") %>
+
+<%= @data['results'].each_with_index.map do |row, i|
+"    dt.addRow([" +
+  @data['columns'].each_with_index.map do |col, i|
+    if row[col].nil?
+      'undefined'
+    elsif @data['types'][i] =~ /^date/
+     "parseDateTime('#{row[col]}')"
+    elsif @data['types'][i] == 'number'
+      "#{row[col]}"
+    else
+      "'#{ row[col].gsub(/'/, "\\\\'") }'"
+    end
+  end.join(', ') + "]);"
+end.join("\n") %>
+
+    var floatFormat    = new google.visualization.NumberFormat({fractionDigits: 2});
+    var integerFormat  = new google.visualization.NumberFormat({fractionDigits: 0});
+    var dateFormat     = new google.visualization.DateFormat({pattern: "yyyy-MM-dd", timeZone: -1 * localTimezone});
+    var datetimeFormat = new google.visualization.DateFormat({pattern: "yyyy-MM-dd HH:mm:ss", timeZone: -1 * localTimezone});
+
+<% @data['columns'].each_with_index do |col, i| %>
+  <% if @data['formats'][i] != 'string' %>
+    <%= "#{@data['formats'][i]}Format.format(dt, #{i});" %>
+  <% end %>
+<% end %>
+
+    var table = new google.visualization.Table($('#google-table').get(0));
+
+    table.draw(dt, { allowHtml: true,
+                     showRowNumber: true,
+                     page: 'enable',
+                     pageSize: 100 });
+
+    <% if @data['formats'].include?('date') || @data['formats'].include?('datetime') %>
+    $('#google-chart').show();
+    $('#google-chart-columns').show();
+    var dv = new google.visualization.DataView(dt);
+
+    var chart = new google.visualization.AnnotatedTimeLine($('#google-chart').get(0));
+
+    setChartColumns = function() {
+        dv.setColumns([0].concat($.map($('.google-chart-column-item:checked'), function(val, i) { return parseInt(val.value) })));
+        chart.draw(dv, { displayAnnotations: false,
+                         displayRangeSelector: false,
+                         displayZoomButtons: false,
+                         wmode: 'transparent' } );
+    }
+
+    $('.google-chart-column-item').click(setChartColumns);
+    setChartColumns();
+
+    <% else %>
+    $('#google-chart').hide();
+    $('#google-chart-columns').hide();
+    <% end %>
+  }
+</script>

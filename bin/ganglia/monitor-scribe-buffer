@@ -1,0 +1,45 @@
+#!/usr/bin/perl -w
+
+use strict;
+
+use Getopt::Long;
+
+my ($dir, $file, $rate);
+GetOptions('dir|d=s'  => \$dir,
+		   'file|f=s' => \$file,
+		   'rate|r=s' => \$rate,
+		  );
+
+$dir ||= '/var/spool/scribe';
+
+die "No such directory '$dir'\n" unless -e $dir;
+die "Please supply a base file name\n" unless $file;
+
+my $base_path = "$dir/$file";
+my $num = `ls $base_path* 2>/dev/null | wc -l`;
+
+# Just grab the number bit and ignore anything else
+$num =~ s/^(\d+).*/$1/s;
+
+update_ganglia(name  => $file.'-buffer-files',
+			   value => $num,
+			   type  => 'int32',
+			   units => 'files',
+			   slope => 'both',
+			   tmax  => $rate,
+			   dmax  => ($rate*2),
+			   group => 'scribe_buffer',
+			  );
+
+sub update_ganglia {
+	my (%param) = @_;
+
+	my $cmd  = 'gmetric';
+	my @args = map { '--'.$_.'='.$param{$_} } keys %param;
+	if (system($cmd, @args) == 0) {
+		# Success
+	} else {
+		warn "Problem reporting to ganglia\n";
+	}
+}
+

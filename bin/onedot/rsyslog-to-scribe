@@ -1,0 +1,190 @@
+#!/usr/bin/perl -w
+
+use FindBin qw/$Bin/;
+use lib "$Bin/../../lib";
+
+use JSON::XS;
+use Try::Tiny;
+use Getopt::Long;
+
+use Thrift::BinaryProtocol;
+use Thrift::FramedTransportFactory;
+use Thrift::Socket;
+use Scribe::Thrift::scribe;
+
+# Ping the logs every this many seconds
+use constant HEARTBEAT_SECS => 5*60;
+
+use constant CATEGORY => 'onedot';
+
+our $BEATTIME = time;
+our $PROCESSED = 0;
+our $TOTAL     = 0;
+
+# Switch off buffering
+$|++;
+
+my $scribe_host = 'localhost';
+my $scribe_port = 1463;
+my $update = 500000;
+my $debug  = 0;
+
+my $rsyslog_host = 'localhost';
+my $rsyslog_port = 11514;
+
+GetOptions( "host=s"   => \$scribe_host,
+			"port=i"   => \$scribe_port,
+			"update=i" => \$update,
+			"debug"    => \$debug );
+
+# Open connection to local scribe
+my $socket    = Thrift::Socket->new($scribe_host, $scribe_port);
+my $transport = Thrift::FramedTransport->new($socket);
+my $protocol  = Thrift::BinaryProtocol->new($transport);
+
+$socket->setSendTimeout(60000);
+$socket->setRecvTimeout(60000);
+
+my $client = Scribe::Thrift::scribeClient->new($protocol, $protocol);
+
+my $rsyslog_server = start_rsyslog_server($rsyslog_port);
+
+my $start_period = get_start_period();
+
+while (my $rsyslog_client = $rsyslog_server->accept) {
+	print STDERR "Accepted connection from rsyslog on port $rsyslog_port\n";
+	$rsyslog_client->autoflush(1);
+
+	while (my $line = <$rsyslog_client>) {
+		chomp($line);
+		$TOTAL++;
+
+		process_line($line);
+
+		# Note how many messages we've processed every 15min
+		if (time-$start_period > 900) {
+			my @t  = localtime($start_period);
+			my @t2 = localtime($start_period+900);
+			printf("%02d:%02d - %02d:%02d : %d received, %d sent, %d dropped\n", @t[2,1], @t2[2,1], $TOTAL, $PROCESSED, $TOTAL-$PROCESSED);
+			$start_period = get_start_period();
+			$TOTAL = 0;
+			$PROCESSED = 0;
+		}
+	}
+
+	close $rsyslog_client;
+}
+
+$transport->close();
+
+################################################################################
+
+sub get_start_period {
+	my $t = time;
+
+	# Return the most recent 15min period
+	return $t-($t % 900);
+}
+
+sub start_rsyslog_server {
+	my ($port) = @_;
+	my $server = IO::Socket::INET->new( Proto     => 'tcp',
+    	                                LocalPort => $port,
+        	                            Listen    => SOMAXCONN,
+            	                        Reuse     => 1 );
+	die "Can't create socket: $!" unless $server;
+
+	logmsg("Socket created, waiting for rsyslog");
+
+	return $server;
+}
+
+sub read_from_rsyslog {
+	my $self = shift;
+	die "Connection to rsyslog not open\n" unless $self->server;
+
+	# Wait to accept a connection from rsyslog.  Close the connection and wait for
+	# a new one if rsyslog disconnects.
+
+}
+
+sub process_line {
+	my ($line) = @_;
+
+	# Show some indications in the log that we are alive and running
+	heartbeat();
+
+	my ($beacon, $p) = $line =~ m!BEACON: (\S+)\s+/__(?:onedot|track)(?:/view)?\?(.+)!;
+	unless ($beacon and $p) {
+		logmsg("Dropped line: missing beacon or query data");	
+		return;
+	}
+
+	$p =~ s/\&amp;/\&/g;
+
+	my %result;
+	my @parts = split('&', $p);
+	for my $pair (@parts) {
+		my ($key, $value) = split("=", $pair);
+		next unless $key;
+
+		$result{$key} = $value;
+	}
+
+	$result{beacon} = $beacon;
+
+	print STDERR "Bad city ID: $line\n" and return unless defined($result{'c'}) && $result{'c'} =~ /^[+-]?\d+$/;
+	print STDERR "Bad NS: $line\n" and return unless defined($result{'n'}) && $result{'n'} =~ /^[+-]?\d+$/;
+	print STDERR "Bad page ID: $line\n" and return if $result{'a'} && $result{'a'} !~ /^[+-]?\d+$/;
+	print STDERR "Bad user ID: $line\n" and return unless defined($result{'u'}) && $result{'u'} =~ /^[+-]?\d+$/;
+
+	my @ts = localtime();
+	$result{lv} = sprintf("%04d-%02d-%02d %02d:%02d:%02d", $ts[5]+1900, $ts[4]+1, @ts[3,2,1,0]);
+
+	my %params = ( 'method' => ( $PROCESSED > 0 && $PROCESSED % $update == 0 ) ? 'move' : 'collect', 'params' => \%result );
+	my $json = encode_json \%params;
+
+	my $entry = Scribe::Thrift::LogEntry->new( { category => CATEGORY(), message => $json });
+	try {
+		$transport->open() unless $transport->isOpen();
+		my $tries = 0;
+		while ($tries < 3) {
+			my $rc = $client->Log( [ $entry ] );
+			if ($rc == Scribe::Thrift::ResultCode::TRY_LATER) {
+				$tries++;
+				logmsg("Rate limiting $tries ...");
+				sleep(1) if $tries < 3;
+			} else {
+				last;
+			}
+		}
+
+		if ($tries == 3)  {
+			logmsg("Dropped line: received TRY_LATER from scribe");
+		} else {
+			$PROCESSED++;
+			debug("processed $json and send to $scribe_host:$scribe_port");
+			logmsg("processed $update and send to $scribe_host:$scribe_port") if $params{method} eq "move";
+		}
+	}
+	catch {
+		logmsg("Failed to send line: ".$_->{"message"});
+	};
+}
+
+sub heartbeat {
+	return if (time-$BEATTIME) < HEARTBEAT_SECS();
+	logmsg("onedot_cat.pl running ... ");
+	$BEATTIME = time;
+}
+
+sub debug {
+	my ($msg) = @_;
+	return unless $debug;
+	logmsg($msg);
+}
+
+sub logmsg {
+	my ($msg) = @_;
+	print STDERR $msg."\n";
+}

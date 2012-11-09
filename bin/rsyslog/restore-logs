@@ -1,0 +1,191 @@
+#!/usr/bin/perl -w
+
+=pod
+
+=head1 NAME
+
+restore-logs
+
+=head1 DESCRIPTION
+
+Attempt to restore missing log files by checking the back up rsyslog server for missing files.
+
+=cut
+
+use strict;
+
+use Getopt::Long;
+use Time::Local;
+
+use constant LOG_BASE    => '/var/log/track';
+use constant BACKUP_HOST => 'mq4';
+use constant LOG_DIRS    => [qw(view api event special)];
+
+our ($VERBOSE, $TEST);
+our @TODAY_TS = localtime();
+$TODAY_TS[5] += 1900;
+$TODAY_TS[4]++;
+
+GetOptions('verbose|v' => \$VERBOSE,
+		   'test|t'    => \$TEST,
+		  );
+
+print STDERR "\n\n=== TEST MODE ===\n\n" if $TEST;
+
+foreach my $dir (@{ LOG_DIRS() }) {
+	my $path = LOG_BASE().'/'.$dir;
+	check_path($path);
+}
+
+################################################################################
+
+sub check_path {
+	my ($path) = @_;
+
+	opendir(my $dh, $path) or die "Can't open directory '$path': $!\n";
+	foreach my $file (sort readdir($dh)) {
+		next if $file =~ /^\./;
+		next if $file =~ /\.log$/;
+		my $full = $path.'/'.$file;
+
+		my %info = (year => $file);
+		scan_year($full, \%info) if -d $full;
+	}
+	closedir($dh);
+}
+
+sub scan_year {
+	my ($path, $info) = @_;
+
+	opendir(my $dh, $path) or die "Can't open directory '$path': $!\n";
+	foreach my $file (sort readdir($dh)) {
+		next if $file =~ /^\./;
+		my $full = $path.'/'.$file;
+
+		$info->{month} = $file;
+		scan_month($full, $info) if -d $full;
+	}
+	closedir($dh);
+}
+
+sub scan_month {
+	my ($path, $info) = @_;
+
+	opendir(my $dh, $path) or die "Can't open directory '$path': $!\n";
+	foreach my $file (sort readdir($dh)) {
+		next if $file =~ /^\./;
+		my $full = $path.'/'.$file;
+
+		$info->{day} = $file;
+		scan_day($full, $info) if -d $full;
+	}
+	closedir($dh);
+}
+
+sub scan_day {
+	my ($path, $info) = @_;
+	my @messages;
+	my %ok;
+
+	my %logs;
+	my (%sizes, $last_size);
+	opendir(my $dh, $path) or die "Can't open directory '$path': $!\n";
+	foreach my $file (sort readdir($dh)) {
+		next if $file =~ /^\./;
+		my $full = $path.'/'.$file;
+
+		$ok{$full} = 1;
+
+		if ($file =~ /^[^\.]+\.log-(\d+-\d+)\.\d+(.gz)?$/) {
+			my ($time, $zipped) = ($1, $2);
+
+			if (! $zipped) {
+				push @messages, [$full, "ERROR: unzipped file: $full\n"];
+				delete $ok{$full};
+
+				push @messages, [$full, "FIX: zipping file: $full\n"];
+				system("gzip $full") unless $TEST;
+			}
+
+			$logs{$time} = $full;
+
+			my $size = -s $full;
+
+			# Warn if we had a last size and the current size is more than 20% smaller
+			if (defined $last_size and
+				$size < $last_size and
+				(($last_size-$size) > (.2 * $last_size))) {
+
+				my $drop = int((($last_size-$size)/$last_size)*100);
+				push @messages, [$full, "ERROR: file size drop - $size (${drop}% drop): $full\n"];
+				delete $ok{$full};
+			} else {
+				$last_size = $size;
+			}
+		}
+	}
+	closedir($dh);
+
+	my $missing = find_missing($path, \%logs, $info);
+
+	if (%$missing) {
+		foreach my $time (keys %$missing) {
+			my $file = $missing->{$time};
+			push @messages, [$file, "ERROR: file missing: $file\n"];
+			delete $ok{$file};
+		}
+	}
+
+	foreach my $file (keys %ok) {
+		push @messages, [$file, "PASS: $file\n"];
+	}
+
+	foreach my $mesg (sort {$a->[0] cmp $b->[0]} @messages) {
+		my ($file, $text) = @$mesg;
+		print $text;
+	}
+}
+
+sub find_missing {
+	my ($path, $logs, $info) = @_;
+	my %missing;
+
+	# Pull out the base name of these logs (format : /var/log/track/special/2012/03/17)
+	my ($base_name) = $path =~ m!([^/]+)/\d+/\d+/\d+$!;
+
+	my $is_today = $info->{year}  == $TODAY_TS[5] &&
+				   $info->{month} == $TODAY_TS[4] &&
+				   $info->{day}   == $TODAY_TS[3];
+
+	# If we're checking today's logs, stop checking at the current hour
+	my $end_hour = $is_today ? $TODAY_TS[2] : 23;
+
+	foreach my $h (0..$end_hour) {
+		my @mins;
+		if ($is_today and ($h == $TODAY_TS[2])) {	
+			# Don't look for a log file unless its in the past and we've had 2 min in which to zip it
+			push @mins, 0  if $TODAY_TS[1] > 2;
+			push @mins, 15 if $TODAY_TS[1] > 17;
+			push @mins, 30 if $TODAY_TS[1] > 32;
+			push @mins, 45 if $TODAY_TS[1] > 47;
+		} else {
+			@mins = (0, 15, 30, 45);
+		}
+
+		foreach my $m (@mins) {
+			my $time = sprintf("%02d-%02d", $h, $m);
+			if (!exists $logs->{$time}) {
+				my $epoch = timelocal(0, $m, $h, $info->{day}, $info->{month}-1, $info->{year}-1900);
+				my $file = $base_name.".log-$time.$epoch";
+				$missing{$time} = $path.'/'.$file;
+			}
+		}
+	}
+
+	return \%missing;
+}
+
+sub debug {
+	my ($msg) = @_;
+	print STDERR $msg if $VERBOSE;
+}

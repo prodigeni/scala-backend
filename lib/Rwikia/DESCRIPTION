@@ -1,0 +1,11 @@
+Package: Rwikia
+Type: Package
+Title: Wikia-specific functions and data.
+Version: 1.0
+Date: 2011-12-21
+Author: Jonathan March
+Maintainer: Jonathan March <jmarch@wikia-inc.com>
+Description: Data Warehouse connectivity, wiki- and user-based analysis, custom plotting routines, etc.
+License: Proprietary
+LazyLoad: no
+Depends: RMySQL
