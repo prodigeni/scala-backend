@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 #
-# options
+# options #test
 #
 use strict;
 use common::sense;
