@@ -1,6 +1,0 @@
-Install Instructions
-
-1.  Launch R and install RMySQL (including its dependencies)
-2.  From the directory that contains Rwikia, run:
-    R CMD INSTALL Rwikia
-

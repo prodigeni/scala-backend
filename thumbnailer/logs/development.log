@@ -1,4 +1,0 @@
-[17753] error @0.000883> [hit #1]request to / crashed: '/usr/wikia/source/backend/bin/thumbnailer/views/index.tt' is not a regular file at /usr/local/share/perl/5.12.3/Dancer.pm line 161 in /usr/local/share/perl/5.12.3/Dancer/Handler.pm l. 84
-[17753] error @0.000762> [hit #5]request to / crashed: '/usr/wikia/source/backend/bin/thumbnailer/views/index.tt' is not a regular file at /usr/local/share/perl/5.12.3/Dancer.pm line 161 in /usr/local/share/perl/5.12.3/Dancer/Handler.pm l. 84
-[17753] error @0.000767> [hit #7]request to / crashed: '/usr/wikia/source/backend/bin/thumbnailer/views/index.tt' is not a regular file at /usr/local/share/perl/5.12.3/Dancer.pm line 161 in /usr/local/share/perl/5.12.3/Dancer/Handler.pm l. 84
-[17753] error @0.000762> [hit #9]request to / crashed: '/usr/wikia/source/backend/bin/thumbnailer/views/index.tt' is not a regular file at /usr/local/share/perl/5.12.3/Dancer.pm line 161 in /usr/local/share/perl/5.12.3/Dancer/Handler.pm l. 84
