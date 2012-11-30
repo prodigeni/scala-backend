@@ -1,5 +1,4 @@
-This repository is base for submodules. After cloning it please add submodules:
+This repository is base for submodules. When you clone this repo you'll clone submodules as well.
 
-```
- git submodule add git@github.com:Wikia/scala-wikifactory.git wikifactory
-```
+Current submodules:
+* scala-wikifactory as wikifactory
