@@ -8,10 +8,11 @@
 
 package com.wikia.wikifactory
 
-import scala.slick.session.Database
-import Database.threadLocalSession
-import scala.slick.jdbc.{StaticQuery => Q, GetResult}
-import java.util.logging.Logger
+import collection.JavaConversions._
+import java.sql.DriverManager
+import org.jooq._
+import org.jooq.impl._
+import org.jooq.impl.Factory._
 
 object DB {
   val DB_MASTER       : Int = -2
@@ -74,11 +75,19 @@ class DB( var dbType: Int, var dbGroup: String = None.toString(), var dbName: St
     case e: Exception => println("exception caught: " + e.getMessage + "\n\nStack:\n" + e.getStackTraceString)
   }
 
-  def connect() = {
+  def connect() : Factory = {
     val dbDriver = "com." + dbTemplate.get("type") + ".jdbc.Driver"
     val dbConn = "jdbc:" + dbTemplate.get("type") + "://" + dbTemplate.get("host") + "/" + dbName
     Class.forName( dbDriver )
-    Database.forURL( dbConn, driver = dbDriver, user = dbTemplate.get("user"), password = dbTemplate.get("password") )
+
+    val dialect = dbTemplate.get("type") match {
+      case "mysql" => SQLDialect.MYSQL
+      case "postgresql" => SQLDialect.POSTGRES
+    }
+
+    //Database.forURL( dbConn, driver = dbDriver, user = dbTemplate.get("user"), password = dbTemplate.get("password") )
+    val c = DriverManager.getConnection( dbConn, dbTemplate.get("user"), dbTemplate.get("password") )
+    new Factory(c, dialect)
   }
   // TO DO
   def lightMode() : Boolean = false
