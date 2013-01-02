@@ -1,3 +1,0 @@
-[submodule "wikifactory"]
-	path = wikifactory
-	url = git@github.com:Wikia/scala-wikifactory.git
