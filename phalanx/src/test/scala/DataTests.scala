@@ -38,27 +38,17 @@ class DataTests extends FlatSpec {
       }
   }).toIndexedSeq
 
-  def time[A](msg:String, f: => A) = {
-    val s = System.nanoTime
-    val ret = f
-    println(msg+": "+(System.nanoTime-s)/1e6+"ms")
-    ret
-  }
-
   "There" should "be 1000 rules" in { rules.length === 1000 }
   "First id" should "be 1" in { rules.head.dbInfo.dbId === 1 }
   "Last id" should "be 4014" in { rules.last.dbInfo.dbId === 4014 }
 
   "RuleSystem" should "work" in {
     val rs = new RuleSystem(rules)
-    val crs = time("combine", { rs.combineRules })
-    val regexChecker = crs.checkers(CaseSensitive)
+    val crs =  rs.combineRules
     intercept[RuleViolation] { rs.check("fuck")}
     rs.check("something else")
     crs.check("something else")
 
-    time("rs check", { rs.check("something else") })
-    time("crs check", { crs.check("something else") })
 
   }
 

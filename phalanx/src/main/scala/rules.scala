@@ -1,7 +1,6 @@
 package com.wikia.phalanx
 
 import collection.JavaConversions._
-import collection.{mutable, BitSet}
 import com.wikia.phalanx.db.Tables.PHALANX
 import com.wikia.phalanx.db.tables.records.PhalanxRecord
 
@@ -126,13 +125,12 @@ object RuleSystem {
 }
 
 class CombinedRuleSystem(initialRules: Traversable[DatabaseRule]) extends RuleSystem(initialRules) {
-  val checkers = Map( (CaseSensitive, new RegexChecker(rules.map { _.checker.regexPattern }.mkString("|"))),
+  val checkers = Seq( (CaseSensitive, new RegexChecker(rules.map { _.checker.regexPattern }.mkString("|"))),
                       (CaseInsensitive, new RegexChecker(rules.map { _.checker.regexPattern }.mkString("|"))) )
   override def isMatch(s: Checkable): Boolean = {
     checkers.exists( (pair: (CaseType, RegexChecker)) => {
-      pair match {
-        case (caseType: CaseType, rule: Rule) => rule.isMatch(caseType.extract(s))
-      }
+      val (caseType: CaseType, rule: Rule) = pair
+      rule.isMatch(caseType.extract(s))
     })
   }
   override def allMatches(s: Checkable) = rules flatMap { _.allMatches(s) }
