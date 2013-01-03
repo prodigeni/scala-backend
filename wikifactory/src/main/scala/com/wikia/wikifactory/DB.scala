@@ -77,7 +77,8 @@ class DB( var dbType: Int, var dbGroup: String = None.toString(), var dbName: St
 
   def connect() : Factory = {
     val dbDriver = "com." + dbTemplate.get("type") + ".jdbc.Driver"
-    val dbConn = "jdbc:" + dbTemplate.get("type") + "://" + dbTemplate.get("host") + "/" + dbName
+    val dbConn = "jdbc:" + dbTemplate.get("type") + "://" + dbTemplate.get("host") + "/" + dbName +
+      "?zeroDateTimeBehavior=convertToNull"
     Class.forName( dbDriver )
 
     val dialect = dbTemplate.get("type") match {

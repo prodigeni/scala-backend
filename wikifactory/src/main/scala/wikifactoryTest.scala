@@ -5,7 +5,7 @@ import com.wikia.wikifactory._;
  */
 object wikifactoryTest extends App {
   val db = new DB( DB.DB_MASTER, "", "wikicities" ).connect
-  val resultQuery = db.resultQuery("select city_id from city_list limit 1")
+  val resultQuery = db.resultQuery("select city_last_timestamp from city_list limit 1")
 
-  println( resultQuery.fetch("city_id").toString )
+  println( resultQuery.fetch("city_last_timestamp").toString )
 }
