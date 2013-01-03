@@ -1,5 +1,10 @@
 package com.wikia.phalanx
 
+import collection.JavaConversions._
+import collection.{mutable, BitSet}
+import com.wikia.phalanx.db.Tables.PHALANX
+import com.wikia.phalanx.db.tables.records.PhalanxRecord
+
 class RuleViolation(val rules:Traversable[RuleDatabaseInfo]) extends Exception {
   def ruleIds = rules.map( rule => rule.dbId)
 }
@@ -77,6 +82,46 @@ class RuleSystem(initialRules: Traversable[DatabaseRule]) extends Rule {
   def combineRules: CombinedRuleSystem = new CombinedRuleSystem(rules)
   def reloadRules(added: Iterable[DatabaseRule], deletedIds: Iterable[Int]): Rule = {
     this // todo
+  }
+}
+
+object RuleSystem {
+
+  val contentTypes = Map(  // bitmask to types
+    (1, "content"),    // const TYPE_CONTENT = 1;
+    (2, "summary"),    // const TYPE_SUMMARY = 2;
+    (4, "title"),      // const TYPE_TITLE = 4;
+    (8, "user"),  // const TYPE_USER = 8;
+    (16, "question_title"),  // const TYPE_ANSWERS_QUESTION_TITLE = 16;
+    (32, "recent_questions"),  // const TYPE_ANSWERS_RECENT_QUESTIONS = 32;
+    (64, "wiki_creation"),  // const TYPE_WIKI_CREATION = 64;
+    (128, "cookie"),  // const TYPE_COOKIE = 128;
+    (256, "email")  // const TYPE_EMAIL = 256;
+  )
+
+  def makeDbInfo(row:PhalanxRecord):RuleDatabaseInfo = {
+    RuleDatabaseInfo(new String(row.getPText, "utf-8"), row.getPId.intValue(), new String(row.getPReason, "utf-8"))
+  }
+
+  def fromDatabase(db: org.jooq.FactoryOperations):Map[String,RuleSystem] = {
+    val result = new collection.mutable.HashMap[String, collection.mutable.Set[DatabaseRule]]()
+    for (v <- contentTypes.values) result(v) = collection.mutable.Set.empty[DatabaseRule]
+    val query = db.selectFrom(PHALANX).where(PHALANX.P_EXPIRE.isNull)
+    for (row: PhalanxRecord <- query.fetch().iterator()) {
+      val ruleMaker = if (row.getPRegex==1) Rule.regex _ else if (row.getPExact==1) Rule.exact _ else Rule.contains _
+      try {
+        val rule = ruleMaker(makeDbInfo(row), row.getPCase == 1)
+        val t = row.getPType.intValue()
+        for ( (i:Int, s:String) <- contentTypes) {
+          if ((i & t) != 0) result(s) += rule
+        }
+      }
+      catch {
+        case e:java.util.regex.PatternSyntaxException => Unit
+        case e => throw e
+      }
+    }
+    result.mapValues( rules => new CombinedRuleSystem(rules) ).toMap
   }
 }
 

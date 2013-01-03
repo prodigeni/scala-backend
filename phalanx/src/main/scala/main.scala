@@ -7,6 +7,7 @@ import com.twitter.finagle.http.path._
 import com.twitter.util.Future
 import org.jboss.netty.handler.codec.http.HttpResponseStatus
 import org.codehaus.jackson.map.ObjectMapper
+import com.wikia.wikifactory._
 
 object Respond {
   val jsonMapper = new ObjectMapper()
@@ -59,7 +60,8 @@ class MainService(var rules: Map[String,RuleSystem]) extends Service[Request, Re
         Respond("reloaded")
       }
       case Root / "stats" => {
-        Respond("stats")
+        val response = rules.toSeq.map( t => { val (s, rs) = t; s + ": " + rs.rules.size.toString} ).mkString("\n")
+        Respond(response)
       }
       case _ => Respond.error("not found", Status.NotFound)
     }
@@ -67,11 +69,8 @@ class MainService(var rules: Map[String,RuleSystem]) extends Service[Request, Re
 }
 
 object Main extends App {
-  val ruleSystem = new RuleSystem(List(
-    Rule.contains("fuck"), Rule.exact("Forbidden")
-  ))
-
-  val service = new MainService(Map( ("title", ruleSystem)) )
+  val db = new DB (DB.DB_MASTER, "", "wikicities").connect()
+  val service = new MainService(RuleSystem.fromDatabase(db) )
   val port = Option(System getenv "PORT") match {
     case Some(p) => p.toInt
     case None => 8080

@@ -1,6 +1,6 @@
 name := "phalanx"
 
-organization := "wikia.com"
+organization := "com.wikia"
 
 version := "0.1"
 
@@ -12,7 +12,10 @@ resolvers += "scala-tools-releases" at "https://repository.jboss.org/nexus/conte
 
 resolvers += "scala-tools.org" at "http://scala-tools.org/repo-releases"
 
+resolvers += "Local Ivy Repository" at "file://"+Path.userHome.absolutePath+"/.ivy2/local"
+
 libraryDependencies ++= Seq(
+  "com.wikia" %% "wikifactory" % "0.1",
   "com.twitter" % "finagle-core" % "5.3.1",
   "com.twitter" % "finagle-http" % "5.3.1",
   "org.codehaus.jackson" % "jackson-mapper-asl" % "1.9.11",

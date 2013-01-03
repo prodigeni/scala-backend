@@ -1,6 +1,6 @@
 name := "wikifactory"
 
-organization := "wikia.com"
+organization := "com.wikia"
 
 version := "0.1"
 
