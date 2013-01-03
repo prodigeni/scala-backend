@@ -3,5 +3,5 @@ target
 *.class
 .metadata
 .idea
-
+.idea_modules
 .classpath

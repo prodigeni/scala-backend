@@ -1,4 +1,6 @@
-name := "finagle-poc"
+name := "phalanx"
+
+organization := "wikia.com"
 
 version := "0.1"
 
@@ -13,8 +15,9 @@ resolvers += "scala-tools.org" at "http://scala-tools.org/repo-releases"
 libraryDependencies ++= Seq(
   "com.twitter" % "finagle-core" % "5.3.1",
   "com.twitter" % "finagle-http" % "5.3.1",
+  "org.codehaus.jackson" % "jackson-mapper-asl" % "1.9.11",
   "org.scalatest" %% "scalatest" % "1.8" % "test",
-  "org.codehaus.jackson" % "jackson-mapper-asl" % "1.9.11"
+  "net.sf.opencsv" % "opencsv" % "2.0" % "test"
 )
 
 

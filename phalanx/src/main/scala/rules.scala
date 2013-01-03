@@ -20,11 +20,13 @@ trait CaseType {
 object CaseSensitive extends CaseType {
   def extract(s:Checkable) = s.text
   def extract(s:String) = s
+  override def toString = "CaseSensitive"
 }
 
 object CaseInsensitive extends CaseType {
   def extract(s:Checkable) = s.lcText
   def extract(s:String) = s.toLowerCase
+  override def toString = "CaseInsensitive"
 }
 
 abstract class Checker(val text: String) {
@@ -32,21 +34,24 @@ abstract class Checker(val text: String) {
   def regexPattern : String
 }
 
-class ExactRule(text: String) extends Checker(text) {
+class ExactChecker(text: String) extends Checker(text) {
   def isMatch(s: String): Boolean = s == text
   def regexPattern = "^" +  java.util.regex.Pattern.quote(text) + "$"
+  override def toString = "ExactChecker("+text+")"
 
 }
 
-class ContainsRule(text: String) extends Checker(text) {
+class ContainsChecker(text: String) extends Checker(text) {
   def isMatch(s: String): Boolean = s.contains(text)
   def regexPattern = java.util.regex.Pattern.quote(text)
+  override def toString = "ContainsChecker("+text+")"
 }
 
-class RegexRule(text:String) extends Checker(text) {
+class RegexChecker(text:String) extends Checker(text) {
   val regex = text.r
   def isMatch(s: String): Boolean = regex.findFirstIn(s).isDefined
   def regexPattern = text
+  override def toString = "RegexChecker("+regex+")"
 }
 
 trait Rule {
@@ -76,10 +81,10 @@ class RuleSystem(initialRules: Traversable[DatabaseRule]) extends Rule {
 }
 
 class CombinedRuleSystem(initialRules: Traversable[DatabaseRule]) extends RuleSystem(initialRules) {
-  val checkers = Map( (CaseSensitive, new RegexRule(rules.map { _.checker.regexPattern }.mkString("|"))),
-                      (CaseInsensitive, new RegexRule(rules.map { _.checker.regexPattern }.mkString("|"))) )
+  val checkers = Map( (CaseSensitive, new RegexChecker(rules.map { _.checker.regexPattern }.mkString("|"))),
+                      (CaseInsensitive, new RegexChecker(rules.map { _.checker.regexPattern }.mkString("|"))) )
   override def isMatch(s: Checkable): Boolean = {
-    checkers.exists( (pair: (CaseType, RegexRule)) => {
+    checkers.exists( (pair: (CaseType, RegexChecker)) => {
       pair match {
         case (caseType: CaseType, rule: Rule) => rule.isMatch(caseType.extract(s))
       }
@@ -93,9 +98,9 @@ object Rule {
   def apply(dbInfo: RuleDatabaseInfo, caseSensitive: Boolean, checkerFactory: String => Checker) = {
     new DatabaseRule(dbInfo, if (caseSensitive) CaseSensitive else CaseInsensitive, checkerFactory)
   }
-  def regex(dbInfo: RuleDatabaseInfo, caseSensitive: Boolean = false) = this(dbInfo, caseSensitive, s => new RegexRule(s))
-  def exact(dbInfo: RuleDatabaseInfo, caseSensitive: Boolean = false) = this(dbInfo, caseSensitive, s => new ExactRule(s))
-  def contains(dbInfo: RuleDatabaseInfo, caseSensitive: Boolean = false) = this(dbInfo, caseSensitive, s => new ContainsRule(s))
+  def regex(dbInfo: RuleDatabaseInfo, caseSensitive: Boolean = false) = this(dbInfo, caseSensitive, s => new RegexChecker(s))
+  def exact(dbInfo: RuleDatabaseInfo, caseSensitive: Boolean = false) = this(dbInfo, caseSensitive, s => new ExactChecker(s))
+  def contains(dbInfo: RuleDatabaseInfo, caseSensitive: Boolean = false) = this(dbInfo, caseSensitive, s => new ContainsChecker(s))
 
 }
 
