@@ -8,19 +8,16 @@
 
 package com.wikia.wikifactory
 
+import com.wikia.Types._
 import scala.util.Properties._
 import scala.io.Source.{fromFile}
-import java.util.{ArrayList, LinkedHashMap}
+import java.util.ArrayList
 import scala.collection.JavaConverters._
 import org.yaml.snakeyaml._
 import scala.util.{Random}
 import java.util
 
 class LBFactoryConf( sourcePath: String ) {
-  type HashMapStr[T] = LinkedHashMap[ String,T ]
-  type HashMapStrHash[T] = LinkedHashMap[ String, LinkedHashMap[String, T] ]
-  type HashMapStrHashHash[T] = LinkedHashMap[ String, LinkedHashMap[String, LinkedHashMap[String, T]] ]
-
   val yamlData = (new Yaml).load( fromFile( sourcePath ).mkString ).asInstanceOf[ ArrayList[_] ]
   val section = yamlData.get(0).asInstanceOf[HashMapStr[AnyRef]]
 

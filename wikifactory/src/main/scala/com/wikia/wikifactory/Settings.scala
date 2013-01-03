@@ -1,12 +1,10 @@
 /**
- *  @author Krzysztof Krzyżaniak (eloy) <eloy@wikia-inc.com>
+ *  @author Piotr Molski (moli) <moli@wikia-inc.com>
  */
 package com.wikia.wikifactory
 
-import org.yaml.snakeyaml.Yaml
-import org.yaml.snakeyaml.constructor.Constructor
-import scala.collection.mutable.ListBuffer
+import com.wikia.Types._
 
 class Settings {
-  val containerMap = new scala.collection.mutable.ListBuffer
+  // not used now
 }
