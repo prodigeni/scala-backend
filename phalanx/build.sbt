@@ -39,7 +39,8 @@ libraryDependencies ++= Seq(
   "org.scalatest" %% "scalatest" % "1.8" % "test",
   "net.sf.opencsv" % "opencsv" % "2.0" % "test",
   "org.apache.thrift" % "libthrift" % "0.9.0",
-  "org.apache.thrift" % "libfb303" % "0.9.0"
+  "org.apache.thrift" % "libfb303" % "0.9.0",
+  "com.wikia" % "scribe-thrift-client" % "2.2"
 )
 
 
