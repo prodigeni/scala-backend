@@ -11,7 +11,7 @@ class RuleTests extends FlatSpec  {
     val rule = Rule.exact("Something")
     rule.check("Something else")
     intercept[RuleViolation] { rule.check("Something") }
-    rule.allMatches("Something") === List(rule.dbInfo)
+    assert(rule.allMatches("Something") === List(rule.dbInfo))
   }
 
   "ContainsChecker" should "match contains" in {
@@ -28,7 +28,7 @@ class RuleTests extends FlatSpec  {
       rule.check("wolf")
       intercept[RuleViolation] { rule.check("Mary has a lamb")}
       intercept[RuleViolation] { rule.check("Mary has a wolf")}
-      rule.allMatches("Mary has a lamb") === List(Rule.contains("Mary").dbInfo)
+      assert(rule.allMatches("Mary has a lamb") === Set(Rule.contains("Mary").dbInfo))
       intercept[RuleViolation] { rule.check("lamb")}
       rule.check("John has a lamb")
     })

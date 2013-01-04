@@ -120,7 +120,7 @@ object RuleSystem {
         case e => throw e
       }
     }
-    result.mapValues( rules => new CombinedRuleSystem(rules) ).toMap
+    result.mapValues( rules => new RuleSystem(rules) ).toMap
   }
 }
 

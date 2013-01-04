@@ -8,6 +8,8 @@ import com.twitter.util.Future
 import org.jboss.netty.handler.codec.http.HttpResponseStatus
 import org.codehaus.jackson.map.ObjectMapper
 import com.wikia.wikifactory._
+import com.twitter.finagle.http.filter.ExceptionFilter
+import com.twitter.logging.Logger
 
 object Respond {
   val jsonMapper = new ObjectMapper()
@@ -22,12 +24,15 @@ object Respond {
 }
 
 class MainService(var rules: Map[String,RuleSystem]) extends Service[Request, Response] {
+	val logger = Logger.get()
+	logger.setLevel(Logger.DEBUG)
   def selectRuleSystem(request: Request):Option[RuleSystem] = {
     request.params.get("type") match {
       case Some(s:String) => rules.get(s)
       case None => None
     }
   }
+	def check(request: Request) = 1
   def apply(request: Request) = {
     Path(request.path) match {
       case Root => Respond("PHALANX ALIVE")
@@ -36,7 +41,11 @@ class MainService(var rules: Map[String,RuleSystem]) extends Service[Request, Re
           case None => Respond.error("Unknown type parameter")
           case Some(ruleSystem:RuleSystem) => {
             request.params.get("content") match {
-              case Some(s:String) =>  Respond( if (ruleSystem.isMatch(s)) "failure" else "ok" )
+              case Some(s:String) => {
+	              val matched = ruleSystem.isMatch(s)
+	              val response = if (matched) "failure" else "ok"
+	              Respond(response)
+              }
               case None =>  Respond.error("content parameter is missing")
             }
           }
@@ -69,8 +78,12 @@ class MainService(var rules: Map[String,RuleSystem]) extends Service[Request, Re
 }
 
 object Main extends App {
-  val db = new DB (DB.DB_MASTER, "", "wikicities").connect()
-  val service = new MainService(RuleSystem.fromDatabase(db) )
+	Logger.reset()
+	Logger.get().setLevel(Logger.DEBUG) // make configurable
+	val logger = Logger.get()
+	logger.info("Loading rules from database")
+	val db = new DB (DB.DB_MASTER, "", "wikicities").connect()
+  val service = ExceptionFilter andThen new MainService(RuleSystem.fromDatabase(db))
   val port = Option(System getenv "PORT") match {
     case Some(p) => p.toInt
     case None => 8080
@@ -80,8 +93,10 @@ object Main extends App {
     .codec(RichHttp[Request](Http()))
     .name("Phalanx")
     .bindTo(new java.net.InetSocketAddress(port))
+
   val server = config.build(service)
 
-  println("Server started on port: %s".format(port))
+
+  logger.info("Server started on port: %s".format(port))
 }
 
