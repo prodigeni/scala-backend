@@ -37,7 +37,9 @@ libraryDependencies ++= Seq(
   "com.twitter" % "finagle-http" % "5.3.1",
   "org.codehaus.jackson" % "jackson-mapper-asl" % "1.9.11",
   "org.scalatest" %% "scalatest" % "1.8" % "test",
-  "net.sf.opencsv" % "opencsv" % "2.0" % "test"
+  "net.sf.opencsv" % "opencsv" % "2.0" % "test",
+  "org.apache.thrift" % "libthrift" % "0.9.0",
+  "org.apache.thrift" % "libfb303" % "0.9.0"
 )
 
 
