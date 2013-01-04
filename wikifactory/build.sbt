@@ -6,11 +6,30 @@ version := "0.1"
 
 scalaVersion := "2.9.2"
 
-resolvers += "Sonatype Maven repository" at "https://oss.sonatype.org/content/repositories/snapshots/org/jooq/"
+publishMavenStyle := true
 
-libraryDependencies ++= Seq( 
+publishTo <<= (version) { version: String =>
+	val repoInfo = if( version.trim.endsWith( "SNAPSHOT" ) ) {
+			( "Wikia Maven repository (snapshots)" -> "/srv/maven/snapshots" )
+		}
+		else {
+			( "Wikia Maven repository (releases)" -> "/srv/maven/releases" )
+		}
+	val user = System.getProperty("user.name")
+ 	val keyFile = (Path.userHome / ".ssh" / "id_rsa").asFile
+	Some( Resolver.ssh( repoInfo._1, "pkg-s1.wikia-prod", repoInfo._2 ) as ( user, keyFile ) withPermissions( "0644" ) )
+}
+
+resolvers ++= Seq( 
+	"Sonatype Maven repository" at "https://oss.sonatype.org/content/repositories/snapshots/org/jooq/",
+	"Wikia Maven repository" at "http://pkg-s1.wikia-prod/maven/releases/"
+)
+
+
+libraryDependencies ++= Seq(
 	"org.jooq" % "jooq" % "2.6.1",
 	"org.yaml" % "snakeyaml" % "1.11",
 	"org.scalatest" % "scalatest" % "1.3" % "test",
 	"mysql" % "mysql-connector-java" % "5.1.22"
 )
+
