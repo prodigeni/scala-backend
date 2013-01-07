@@ -14,7 +14,7 @@ class ServiceTests extends FlatSpec  {
 
 	val rules = DataTests.rules
 
-	val service = new MainService(Map( ("tests", new RuleSystem(rules)) ))
+	val service = new MainService(Map( ("tests", new RuleSystem(rules).combineRules )))
 	val config =  ServerBuilder()
 		.codec(RichHttp[Request](Http()))
 		.name("Phalanx")

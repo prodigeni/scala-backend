@@ -59,6 +59,13 @@ class MainService(var rules: Map[String,RuleSystem], val reloader: Map[String, R
 			case e:PatternSyntaxException => Respond("failure")
 		}
 	}
+	def stats(request: Request) = {
+		val response = rules.toSeq.map( t => {
+			val (s, ruleSystem) = t
+			s + ":\n" + (ruleSystem.stats.map { "  "+ _ }.mkString("\n")) +"\n"
+		}).mkString("\n")
+		Respond(response)
+	}
   def apply(request: Request):Future[Response] = {
     Path(request.path) match {
       case Root => Future(Respond("PHALANX ALIVE"))
@@ -69,10 +76,7 @@ class MainService(var rules: Map[String,RuleSystem], val reloader: Map[String, R
 		      rules = newRules
 		      Respond("reloaded")
 	      })
-      case Root / "stats" => threaded {
-        val response = rules.toSeq.map( t => { val (s, rs) = t; s + ": " + rs.rules.size.toString} ).mkString("\n")
-        Respond(response)
-      }
+      case Root / "stats" => threaded { stats(request) }
       case _ => Future(Respond.error("not found", Status.NotFound))
     }
   }
