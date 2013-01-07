@@ -11,7 +11,7 @@ import java.util.LinkedHashMap
  * Date: 03.01.13
  */
 package object Types {
-  type HashMapStr[T] = LinkedHashMap[ String,T ]
-  type HashMapStrHash[T] = LinkedHashMap[ String, LinkedHashMap[String, T] ]
-  type HashMapStrHashHash[T] = LinkedHashMap[ String, LinkedHashMap[String, LinkedHashMap[String, T]] ]
+  type TWHashMapStr[T] = LinkedHashMap[ String,T ]
+  type TWHashMapStrHash[T] = LinkedHashMap[ String, LinkedHashMap[String, T] ]
+  type TWHashMapStrHashHash[T] = LinkedHashMap[ String, LinkedHashMap[String, LinkedHashMap[String, T]] ]
 }

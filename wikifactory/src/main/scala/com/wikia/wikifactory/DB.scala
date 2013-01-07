@@ -28,7 +28,7 @@ object DB {
 
 case class dbException( msg:String ) extends Exception
 
-class DB( var dbType: Int, var dbGroup: String = None.toString(), var dbName: String ) {
+class DB( var dbType: Int = DB.DB_SLAVE, var dbGroup: String = None.toString(), var dbName: String = DB.EXTERNALSHARED ) {
   /* mysql driver */
   private var driverLoaded = false
 
@@ -86,7 +86,6 @@ class DB( var dbType: Int, var dbGroup: String = None.toString(), var dbName: St
       case "postgresql" => SQLDialect.POSTGRES
     }
 
-    //Database.forURL( dbConn, driver = dbDriver, user = dbTemplate.get("user"), password = dbTemplate.get("password") )
     val c = DriverManager.getConnection( dbConn, dbTemplate.get("user"), dbTemplate.get("password") )
     new Factory(c, dialect)
   }

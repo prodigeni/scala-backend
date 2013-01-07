@@ -19,7 +19,7 @@ import java.util
 
 class LBFactoryConf( sourcePath: String ) {
   val yamlData = (new Yaml).load( fromFile( sourcePath ).mkString ).asInstanceOf[ ArrayList[_] ]
-  val section = yamlData.get(0).asInstanceOf[HashMapStr[AnyRef]]
+  val section = yamlData.get(0).asInstanceOf[TWHashMapStr[AnyRef]]
 
   /* default contructor */
   def this() = this( envOrElse("WIKIA_DB_YML", "/usr/wikia/conf/current/DB.yml" ) )
@@ -29,15 +29,14 @@ class LBFactoryConf( sourcePath: String ) {
 
   /* sectionsByDB in YAML config */
   def sectionsDB( name: String ): String = {
-    val sections = section.get("sectionsByDB").asInstanceOf[HashMapStr[String]].get( name )
+    val sections = section.get("sectionsByDB").asInstanceOf[TWHashMapStr[String]].get( name )
     if ( sections != null && !sections.isEmpty ) sections.toString else ""
   }
 
   /* sectionLoads in YAML config */
-  def sectionLoads( name: String ): HashMapStr[Int] =
-    section.get("sectionLoads").asInstanceOf[HashMapStrHash[Int]].get(name)
+  def sectionLoads( name: String ): TWHashMapStr[Int] =
+    section.get("sectionLoads").asInstanceOf[TWHashMapStrHash[Int]].get(name)
   def masterFromSection( name: String ): String = {
-    println("master = " + name)
     sectionLoads( name ).asScala.head._1
   }
   def slaveFromSection( name: String ): String = {
@@ -47,44 +46,44 @@ class LBFactoryConf( sourcePath: String ) {
   }
 
   /* groupLoadsBySection in YAML config */
-  def groupLoadsBySection( name: String ): HashMapStrHash[Int] =
-    section.get("groupLoadsBySection").asInstanceOf[HashMapStrHashHash[Int]].get(name)
+  def groupLoadsBySection( name: String ): TWHashMapStrHash[Int] =
+    section.get("groupLoadsBySection").asInstanceOf[TWHashMapStrHashHash[Int]].get(name)
 
   /* serverTemplate in YAML config */
   def serverTemplate =
-    section.get("serverTemplate").asInstanceOf[HashMapStr[String]]
+    section.get("serverTemplate").asInstanceOf[TWHashMapStr[String]]
 
   /* hostByName in Yaml config */
   def hostsByName( name: String ) : String =
-    section.get("hostsByName").asInstanceOf[HashMapStr[String]].get(name).toString()
+    section.get("hostsByName").asInstanceOf[TWHashMapStr[String]].get(name).toString()
 
   /* externalLoad in Yaml config */
-  def externalLoads( name: String ) : HashMapStr[Int] =
-    section.get("externalLoads").asInstanceOf[HashMapStrHash[Int]].get(name)
+  def externalLoads( name: String ) : TWHashMapStr[Int] =
+    section.get("externalLoads").asInstanceOf[TWHashMapStrHash[Int]].get(name)
 
   /* templateOverridesByCluster in Yaml config */
-  def templateByCluster( name: String) : HashMapStr[String] = {
+  def templateByCluster( name: String) : TWHashMapStr[String] = {
     val t = section.get("templateOverridesByCluster")
     if ( t != null )
-      t.asInstanceOf[HashMapStrHash[String]].get(name)
+      t.asInstanceOf[TWHashMapStrHash[String]].get(name)
     else
       null
   }
 
   /* templateOverridesByServer in Yaml config */
-  def templateByServer( name: String) : HashMapStr[String] = {
+  def templateByServer( name: String) : TWHashMapStr[String] = {
     val t = section.get("templateOverridesByServer")
     if ( t != null )
-      t.asInstanceOf[HashMapStrHash[String]].get(name)
+      t.asInstanceOf[TWHashMapStrHash[String]].get(name)
     else
       null
   }
 
   /* second main section in YAML config */
   def database( name: String ) : ArrayList[String] =
-    yamlData.get(1).asInstanceOf[HashMapStr[ArrayList[String]]].get(name)
+    yamlData.get(1).asInstanceOf[TWHashMapStr[ArrayList[String]]].get(name)
 
   /* third main section in YAML config */
   def external( name: String ) : ArrayList[String] =
-    yamlData.get(2).asInstanceOf[HashMapStr[ArrayList[String]]].get(name)
+    yamlData.get(2).asInstanceOf[TWHashMapStr[ArrayList[String]]].get(name)
 }
