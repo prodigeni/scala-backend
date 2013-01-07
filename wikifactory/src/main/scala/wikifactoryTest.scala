@@ -9,6 +9,9 @@ object wikifactoryTest extends App {
 
   println( resultQuery.fetch("city_last_timestamp").toString )
 
+/**
+ * this code not compiles: 2013/01/07 eloy
+ * 
   val sc = new ScribeHandler("localhost", 9090)
   val res = sc.send( "log_phalanx", Map(
     "blockId" -> 1,
@@ -17,6 +20,7 @@ object wikifactoryTest extends App {
     "blockUser" -> "Test",
     "city_id" -> 177
   ) )
-
+**/
+  
   println ("sc res: " + res.toString)
 }
