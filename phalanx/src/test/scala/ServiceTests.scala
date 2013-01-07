@@ -44,7 +44,7 @@ class ServiceTests extends FlatSpec  {
 		val request = RequestBuilder().url(address+"check").addFormElement( ("type", "tests"), ("content", "fuck") ).buildFormPost()
 		val response = client(request)()
 		val content = response.getContent.toString(charset)
-		assert(content === "failure")
+		assert(content === "failure\n")
 
 	}
 
@@ -52,7 +52,7 @@ class ServiceTests extends FlatSpec  {
 		val request = RequestBuilder().url(address+"check?type=tests&content=fuck").buildGet()
 		val response = client(request)()
 		val content = response.getContent.toString(charset)
-		assert(content === "failure")
+		assert(content === "failure\n")
 
 	}
 

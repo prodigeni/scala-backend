@@ -166,7 +166,7 @@ class CombinedRuleSystem(initialRules: Traversable[DatabaseRule]) extends RuleSy
 		if (!exactCs.isEmpty) result = (CaseSensitive, new SetExactChecker(exactCs.toSet)) :: result
 		if (!exactCi.isEmpty) result = (CaseInsensitive, new SetExactChecker(exactCi.toSet)) :: result
 		if (!cs.isEmpty) result = (CaseSensitive, new RegexChecker(cs.mkString("|"))) :: result
-		if (!ci.isEmpty) result = (CaseInsensitive, new RegexChecker(cs.mkString("|"))) :: result
+		if (!ci.isEmpty) result = (CaseInsensitive, new RegexChecker(ci.mkString("|"))) :: result
 		result.toSeq
 	}
   override def isMatch(s: Checkable): Boolean = {

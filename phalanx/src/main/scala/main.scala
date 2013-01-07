@@ -22,6 +22,8 @@ object Respond {
   }
   def json(data: Any) = Respond(jsonMapper.writeValueAsString(data), Status.Ok, Message.ContentTypeJson)
   def error(info: String, status: HttpResponseStatus = Status.InternalServerError) = Respond(info+"\n", status)
+	def ok = Respond("ok\n")
+	def failure = Respond("failure\n")
 }
 
 class MainService(var rules: Map[String,RuleSystem], val reloader: Map[String, RuleSystem] => Map[String, RuleSystem]) extends Service[Request, Response] {
@@ -44,7 +46,7 @@ class MainService(var rules: Map[String,RuleSystem], val reloader: Map[String, R
 		}
 	}
 	val handleCheck = handleCheckOrMatch( (ruleSystem, s) => {
-		Respond(if (ruleSystem.isMatch(s)) "failure" else "ok")
+		if (ruleSystem.isMatch(s)) Respond.failure else Respond.ok
 	}) _
 	val handleMatch = handleCheckOrMatch( (ruleSystem, s) => {
 		val matches = ruleSystem.allMatches(s).map( r => r.dbId)
@@ -54,9 +56,9 @@ class MainService(var rules: Map[String,RuleSystem], val reloader: Map[String, R
 		val s = request.params.getOrElse("regex", "")
 		try {
 			s.r
-			Respond("ok")
+			Respond.ok
 		} catch {
-			case e:PatternSyntaxException => Respond("failure")
+			case e:PatternSyntaxException => Respond.failure
 		}
 	}
 	def stats(request: Request) = {
