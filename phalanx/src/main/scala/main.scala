@@ -46,10 +46,10 @@ class MainService(var rules: Map[String,RuleSystem], val reloader: Map[String, R
 		}
 	}
 	val handleCheck = handleCheckOrMatch( (ruleSystem, s) => {
-		if (ruleSystem.isMatch(s)) Respond.failure else Respond.ok
+		if (ruleSystem.isMatch(Checkable(s))) Respond.failure else Respond.ok
 	}) _
 	val handleMatch = handleCheckOrMatch( (ruleSystem, s) => {
-		val matches = ruleSystem.allMatches(s).map( r => r.dbId)
+		val matches = ruleSystem.allMatches(Checkable(s)).map( r => r.dbId)
 		Respond.json(matches.toArray[Int])
 	}) _
 	def validateRegex(request: Request) = {

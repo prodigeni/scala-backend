@@ -41,7 +41,7 @@ class ServiceTests extends FlatSpec  {
 	}
 
 	"Check" should "work with POST" in {
-		val request = RequestBuilder().url(address+"check").addFormElement( ("type", "tests"), ("content", "fuck") ).buildFormPost()
+		val request = RequestBuilder().url(address+"check").addFormElement( ("type", "tests"), ("content", "fuckąężźćńół") ).buildFormPost()
 		val response = client(request)()
 		val content = response.getContent.toString(charset)
 		assert(content === "failure\n")

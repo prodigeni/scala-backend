@@ -2,6 +2,9 @@ resolvers += "scala-tools-releases" at "https://repository.jboss.org/nexus/conte
 
 resolvers += "scala-tools.org" at "http://scala-tools.org/repo-releases"
 
+scalaVersion := "2.9.2"
+
+
 
 
 

@@ -40,7 +40,8 @@ libraryDependencies ++= Seq(
   "net.sf.opencsv" % "opencsv" % "2.0" % "test",
   "org.apache.thrift" % "libthrift" % "0.9.0",
   "org.apache.thrift" % "libfb303" % "0.9.0",
-  "com.wikia" % "scribe-thrift-client" % "2.2"
+  "com.wikia" % "scribe-thrift-client" % "2.2",
+  "org.slf4j" % "slf4j-simple" % "1.7.2"
 )
 
 

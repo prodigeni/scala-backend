@@ -1,13 +1,12 @@
 package com.wikia.phalanx
 
-import collection.JavaConversions._
+import scala.collection.JavaConversions._
 import com.wikia.phalanx.db.Tables.PHALANX
 import com.wikia.phalanx.db.tables.records.PhalanxRecord
-import collection.parallel.mutable
 import scala.collection
-import scala.collection
+import java.util.regex.Pattern
 
-class RuleViolation(val rules:Traversable[RuleDatabaseInfo]) extends Exception {
+class RuleViolation(val rules:Traversable[DatabaseRuleInfo]) extends Exception {
   def ruleIds = rules.map( rule => rule.dbId)
 }
 
@@ -15,70 +14,96 @@ case class Checkable(text: String) {
   val lcText = text.toLowerCase
 }
 
-case class RuleDatabaseInfo(text: String, dbId: Int, reason: String) {
-
-}
-
 trait CaseType {
-  def extract(s:Checkable): String
-  def extract(s:String): String
+	def apply(s:Checkable): String
+	def apply(s:String): String
 }
 
 object CaseSensitive extends CaseType {
-  def extract(s:Checkable) = s.text
-  def extract(s:String) = s
-  override def toString = "CS"
+	def apply(s:Checkable) = s.text
+	def apply(s:String) = s
+	override def toString = "CaseSensitive"
 }
 
 object CaseInsensitive extends CaseType {
-  def extract(s:Checkable) = s.lcText
-  def extract(s:String) = s.toLowerCase
-  override def toString = "CI"
+	def apply(s:Checkable) = s.lcText
+	def apply(s:String) = s.toLowerCase
+	override def toString = "CaseInsensitive"
 }
 
 abstract sealed class Checker {
-  def isMatch(s: String): Boolean
-  def regexPattern : String
+	def isMatch(s: Checkable): Boolean
+	def regexPattern : String
 }
 
-case class ExactChecker(text: String) extends Checker {
-  def isMatch(s: String): Boolean = s == text
-  def regexPattern = "^" +  java.util.regex.Pattern.quote(text) + "$"
-  override def toString = "ExactChecker("+text+")"
+case class ExactChecker(caseType: CaseType, text: String) extends Checker {
+	def isMatch(s: Checkable): Boolean = caseType(s) == text
+	def regexPattern = "^" +  java.util.regex.Pattern.quote(text) + "$"
+	override def toString = "ExactChecker("+text+")"
 }
 
-case class ContainsChecker(text: String) extends Checker {
-  def isMatch(s: String): Boolean = s.contains(text)
-  def regexPattern = java.util.regex.Pattern.quote(text)
-  override def toString = "ContainsChecker("+text+")"
+case class ContainsChecker(caseType: CaseType, text: String) extends Checker {
+	def isMatch(s: Checkable): Boolean = caseType(s).contains(text)
+	def regexPattern = java.util.regex.Pattern.quote(text)
+	override def toString = "ContainsChecker("+text+")"
 }
 
-case class RegexChecker(text:String) extends Checker {
-  val regex = text.r
-  def isMatch(s: String): Boolean = regex.findFirstIn(s).isDefined
-  def regexPattern = text
-  override def toString = "RegexChecker("+regex+")"
+case class RegexChecker(caseType: CaseType, text:String) extends Checker {
+	val regex = Pattern.compile(text, if (caseType == CaseSensitive) Pattern.UNICODE_CASE | Pattern.CASE_INSENSITIVE else 0)
+	def isMatch(s: Checkable): Boolean = regex.matcher(s.text).find() // extract not required
+	def regexPattern = text
+	override def toString = "RegexChecker("+text+")"
 }
 
-case class SetExactChecker(texts: Set[String]) extends Checker {
-	def isMatch(s: String): Boolean = texts.contains(s)
+case class SetExactChecker(caseType: CaseType, var texts: Set[String]) extends Checker {
+	if (caseType == CaseInsensitive) texts = texts.map { _.toLowerCase }
+	def isMatch(s: Checkable): Boolean = texts.contains(caseType(s))
 	def regexPattern = texts.map(java.util.regex.Pattern.quote).mkString("|")
+	override def toString = "SetExactChecker("+texts.size+")"
 }
+
+
+object DatabaseRuleInfo {
+	// check if the text contains any letters at all
+	val letterPattern = "\\p{L}".r
+}
+
+trait DatabaseRuleInfo {
+	val text: String
+	val dbId: Int
+	val reason: String
+	val caseSensitive: Boolean
+	val exact: Boolean
+	val regex: Boolean
+}
+
+
 
 trait Rule {
   def isMatch(s: Checkable): Boolean
-  def allMatches(s: Checkable): Traversable[RuleDatabaseInfo]
+  def allMatches(s: Checkable): Traversable[DatabaseRuleInfo]
   def check(s: Checkable) {
     val m = allMatches(s)
     if (m.nonEmpty) throw new RuleViolation(m)
   }
 }
 
-class DatabaseRule(val dbInfo: RuleDatabaseInfo, val caseType: CaseType, checkerFactory: String => Checker) extends Rule {
-  val checker = checkerFactory(caseType.extract(dbInfo.text))
-  def allMatches(s: Checkable): Traversable[RuleDatabaseInfo] = if (isMatch(s)) Some(dbInfo) else None
-  def this(s: String, caseType: CaseType, checkerFactory: String => Checker) = this(new RuleDatabaseInfo(s, 0, ""), caseType, checkerFactory)
-  def isMatch(s: Checkable): Boolean = checker.isMatch(caseType.extract(s))
+object Rule {
+	// simple test cases
+	def exact(text: String, cs:Boolean = true) = new DatabaseRule(text, 0, "", cs, true, false)
+	def regex(text: String, cs:Boolean = true) = new DatabaseRule(text, 0, "", cs, false, true)
+	def contains(text: String, cs:Boolean = true) = new DatabaseRule(text, 0, "", cs, false, false)
+}
+
+case class DatabaseRule(text: String, dbId: Int, reason: String, caseSensitive: Boolean, exact: Boolean, regex: Boolean) extends DatabaseRuleInfo with Rule {
+	val caseType = if (caseSensitive || DatabaseRuleInfo.letterPattern.findFirstIn(text).isEmpty) CaseSensitive else CaseInsensitive
+	val checker: Checker = {
+		if (regex) new RegexChecker(caseType, text) else {
+			if (exact) new ExactChecker(caseType, caseType(text)) else new ContainsChecker(caseType, caseType(text))
+		}
+	}
+  def allMatches(s: Checkable): Traversable[DatabaseRuleInfo] = if (isMatch(s)) Some(this) else None
+  def isMatch(s: Checkable): Boolean = checker.isMatch(s)
 }
 
 class RuleSystem(initialRules: Traversable[DatabaseRule]) extends Rule {
@@ -113,7 +138,6 @@ class RuleSystem(initialRules: Traversable[DatabaseRule]) extends Rule {
 }
 
 object RuleSystem {
-
   val contentTypes = Map(  // bitmask to types
     (1, "content"),    // const TYPE_CONTENT = 1;
     (2, "summary"),    // const TYPE_SUMMARY = 2;
@@ -126,18 +150,18 @@ object RuleSystem {
     (256, "email")  // const TYPE_EMAIL = 256;
   )
 
-  def makeDbInfo(row:PhalanxRecord):RuleDatabaseInfo = {
-    RuleDatabaseInfo(new String(row.getPText, "utf-8"), row.getPId.intValue(), new String(row.getPReason, "utf-8"))
+  def makeDbInfo(row:PhalanxRecord) = {
+    new DatabaseRule(new String(row.getPText, "utf-8"), row.getPId.intValue(), new String(row.getPReason, "utf-8"),
+	    row.getPCase == 1,row.getPExact == 1, row.getPRegex == 1)
   }
 
   def fromDatabase(db: org.jooq.FactoryOperations):Map[String,RuleSystem] = {
     val result = new collection.mutable.HashMap[String, collection.mutable.Set[DatabaseRule]]()
     for (v <- contentTypes.values) result(v) = collection.mutable.Set.empty[DatabaseRule]
-    val query = db.selectFrom(PHALANX).where(PHALANX.P_EXPIRE.isNull)
+    val query = db.selectFrom(PHALANX).where(PHALANX.P_EXPIRE.isNull) // todo: checking expire?
     for (row: PhalanxRecord <- query.fetch().iterator()) {
-      val ruleMaker = if (row.getPRegex==1) Rule.regex _ else if (row.getPExact==1) Rule.exact _ else Rule.contains _
       try {
-        val rule = ruleMaker(makeDbInfo(row), row.getPCase == 1)
+        val rule = makeDbInfo(row)
         val t = row.getPType.intValue()
         for ( (i:Int, s:String) <- contentTypes) {
           if ((i & t) != 0) result(s) += rule
@@ -163,16 +187,16 @@ class CombinedRuleSystem(initialRules: Traversable[DatabaseRule]) extends RuleSy
 			case c:Checker => if (rule.caseType==CaseSensitive) { cs += c.regexPattern } else { ci += c.regexPattern }
 		})
 		var result = List[ (CaseType, Checker) ]()
-		if (!exactCs.isEmpty) result = (CaseSensitive, new SetExactChecker(exactCs.toSet)) :: result
-		if (!exactCi.isEmpty) result = (CaseInsensitive, new SetExactChecker(exactCi.toSet)) :: result
-		if (!cs.isEmpty) result = (CaseSensitive, new RegexChecker(cs.mkString("|"))) :: result
-		if (!ci.isEmpty) result = (CaseInsensitive, new RegexChecker(ci.mkString("|"))) :: result
+		if (!exactCs.isEmpty) result = (CaseSensitive, new SetExactChecker(CaseSensitive, exactCs.toSet)) :: result
+		if (!exactCi.isEmpty) result = (CaseInsensitive, new SetExactChecker(CaseInsensitive, exactCi.toSet)) :: result
+		if (!cs.isEmpty) result = (CaseSensitive, new RegexChecker(CaseSensitive, cs.mkString("|"))) :: result
+		if (!ci.isEmpty) result = (CaseInsensitive, new RegexChecker(CaseInsensitive, ci.mkString("|"))) :: result
 		result.toSeq
 	}
   override def isMatch(s: Checkable): Boolean = {
     checkers.exists( (pair: (CaseType, Checker)) => {
 	    val (caseType: CaseType, checker: Checker) = pair
-	    checker.isMatch(caseType.extract(s))
+	    checker.isMatch(s)
     })
   }
   override def allMatches(s: Checkable) = rules flatMap { _.allMatches(s) }
@@ -192,17 +216,6 @@ class CombinedRuleSystem(initialRules: Traversable[DatabaseRule]) extends RuleSy
 	}
 }
 
-object Rule {
-  def apply(dbInfo: RuleDatabaseInfo, caseSensitive: Boolean, checkerFactory: String => Checker) = {
-    new DatabaseRule(dbInfo, if (caseSensitive) CaseSensitive else CaseInsensitive, checkerFactory)
-  }
-  def regex(dbInfo: RuleDatabaseInfo, caseSensitive: Boolean = false) = this(dbInfo, caseSensitive || caseIrrelevant(dbInfo), s => new RegexChecker(s))
-  def exact(dbInfo: RuleDatabaseInfo, caseSensitive: Boolean = false) = this(dbInfo, caseSensitive || caseIrrelevant(dbInfo), s => new ExactChecker(s))
-  def contains(dbInfo: RuleDatabaseInfo, caseSensitive: Boolean = false) = this(dbInfo, caseSensitive || caseIrrelevant(dbInfo), s => new ContainsChecker(s))
-	// check if the text contains any letters at all
-	private val letterPattern = "\\p{L}".r
-	def caseIrrelevant(dbInfo: RuleDatabaseInfo):Boolean = letterPattern.findFirstIn(dbInfo.text).isEmpty
-}
 
 
 
