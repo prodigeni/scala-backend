@@ -5,12 +5,12 @@ import com.twitter.finagle.builder.ServerBuilder
 import com.twitter.finagle.http.filter.ExceptionFilter
 import com.twitter.finagle.http.path._
 import com.twitter.finagle.http.{Http, RichHttp, Request, Status, Version, Response, Message}
-import com.twitter.logging.Logger
 import com.twitter.util.{FuturePool, Future}
 import com.wikia.wikifactory._
 import java.util.regex.PatternSyntaxException
 import org.codehaus.jackson.map.ObjectMapper
 import org.jboss.netty.handler.codec.http.HttpResponseStatus
+import org.slf4j.{Logger, LoggerFactory}
 
 object Respond {
   val jsonMapper = new ObjectMapper()
@@ -28,7 +28,7 @@ object Respond {
 
 class MainService(var rules: Map[String,RuleSystem], val reloader: Map[String, RuleSystem] => Map[String, RuleSystem]) extends Service[Request, Response] {
 	def this(rules: Map[String, RuleSystem]) = this(rules, x => x)
-	val logger = Logger.get() ; 	logger.setLevel(Logger.DEBUG)
+	val logger = LoggerFactory.getLogger(classOf[MainService])
 	val threaded = FuturePool.defaultPool
   def selectRuleSystem(request: Request):Option[RuleSystem] = {
     request.params.get("type") match {
@@ -61,12 +61,12 @@ class MainService(var rules: Map[String,RuleSystem], val reloader: Map[String, R
 			case e:PatternSyntaxException => Respond.failure
 		}
 	}
-	def stats(request: Request) = {
+	def stats = {
 		val response = rules.toSeq.map( t => {
 			val (s, ruleSystem) = t
 			s + ":\n" + (ruleSystem.stats.map { "  "+ _ }.mkString("\n")) +"\n"
 		}).mkString("\n")
-		Respond(response)
+		response
 	}
   def apply(request: Request):Future[Response] = {
     Path(request.path) match {
@@ -78,19 +78,18 @@ class MainService(var rules: Map[String,RuleSystem], val reloader: Map[String, R
 		      rules = newRules
 		      Respond("reloaded")
 	      })
-      case Root / "stats" => threaded { stats(request) }
+      case Root / "stats" => threaded { Respond(stats) }
       case _ => Future(Respond.error("not found", Status.NotFound))
     }
   }
 }
 
 object Main extends App {
-	Logger.reset()
-	Logger.get().setLevel(Logger.DEBUG) // make configurable
-	val logger = Logger.get()
+	System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "info") // todo: configurable instead?
+	val logger = LoggerFactory.getLogger("Main")
 	logger.info("Loading rules from database")
 	val db = new DB (DB.DB_MASTER, "", "wikicities").connect()
-  val service = ExceptionFilter andThen new MainService(RuleSystem.fromDatabase(db), _ => RuleSystem.fromDatabase(db)) // todo: reload only changed rules
+	val mainService = new MainService(RuleSystem.fromDatabase(db), _ => RuleSystem.fromDatabase(db)) // todo: reload only changed rules
   val port = Option(System getenv "PORT") match {
     case Some(p) => p.toInt
     case None => 8080
@@ -101,7 +100,8 @@ object Main extends App {
     .name("Phalanx")
     .bindTo(new java.net.InetSocketAddress(port))
 
-  val server = config.build(service)
+  val server = config.build(ExceptionFilter andThen mainService)
   logger.info("Server started on port: "+port)
+	logger.info("Initial stats: \n"+mainService.stats)
 }
 

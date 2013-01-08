@@ -5,6 +5,7 @@ import com.wikia.phalanx.db.Tables.PHALANX
 import com.wikia.phalanx.db.tables.records.PhalanxRecord
 import scala.collection
 import java.util.regex.Pattern
+import org.slf4j.{Logger, LoggerFactory}
 
 class RuleViolation(val rules:Traversable[DatabaseRuleInfo]) extends Exception {
   def ruleIds = rules.map( rule => rule.dbId)
@@ -138,6 +139,8 @@ class RuleSystem(initialRules: Traversable[DatabaseRule]) extends Rule {
 }
 
 object RuleSystem {
+	val logger = LoggerFactory.getLogger("RuleSystem")
+
   val contentTypes = Map(  // bitmask to types
     (1, "content"),    // const TYPE_CONTENT = 1;
     (2, "summary"),    // const TYPE_SUMMARY = 2;
@@ -158,8 +161,11 @@ object RuleSystem {
   def fromDatabase(db: org.jooq.FactoryOperations):Map[String,RuleSystem] = {
     val result = new collection.mutable.HashMap[String, collection.mutable.Set[DatabaseRule]]()
     for (v <- contentTypes.values) result(v) = collection.mutable.Set.empty[DatabaseRule]
-    val query = db.selectFrom(PHALANX).where(PHALANX.P_EXPIRE.isNull) // todo: checking expire?
-    for (row: PhalanxRecord <- query.fetch().iterator()) {
+    val query = db.selectFrom(PHALANX).where(PHALANX.P_EXPIRE.isNull).or("p_expire > ?", com.wikia.wikifactory.DB.wikiCurrentTime)
+	  logger.info("Getting database rows")
+	  val rows = query.fetch()
+	  logger.info("Got "+rows.size()+" rows")
+    for (row: PhalanxRecord <- rows.iterator()) {
       try {
         val rule = makeDbInfo(row)
         val t = row.getPType.intValue()

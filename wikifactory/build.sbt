@@ -2,7 +2,7 @@ name := "wikifactory"
 
 organization := "com.wikia"
 
-version := "0.1"
+version := "0.3"
 
 scalaVersion := "2.9.2"
 

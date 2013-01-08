@@ -24,6 +24,10 @@ object DB {
   val DATAWARESHARED  : String = "dataware"
 
   val DB_SPECIALS     = List("smw+")
+
+  val mediaWikiTimeFormat:java.text.DateFormat = new java.text.SimpleDateFormat("yyyyMMddHHmmss")
+  def wikiCurrentTime =  wikiTime(new java.util.Date())
+  def wikiTime(date: java.util.Date) = mediaWikiTimeFormat.format(date)
 }
 
 case class dbException( msg:String ) extends Exception
