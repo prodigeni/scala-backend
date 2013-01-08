@@ -29,7 +29,7 @@ class LBFactoryConf( sourcePath: String ) {
 
   /* sectionsByDB in YAML config */
   def sectionsDB( name: String ): String = {
-    val sections = section.get("sectionsByDB").asInstanceOf[TWHashMapStr[String]].get( name )
+    val sections = section.get( "sectionsByDB" ).asInstanceOf[ TWHashMapStr[ String ] ].get( name )
     if ( sections != null && !sections.isEmpty ) sections.toString else ""
   }
 
