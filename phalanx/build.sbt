@@ -1,3 +1,7 @@
+import AssemblyKeys._ // for sbt-assembly
+
+assemblySettings
+
 name := "phalanx"
 
 organization := "com.wikia"
