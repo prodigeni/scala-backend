@@ -35,6 +35,7 @@ object CaseInsensitive extends CaseType {
 abstract sealed class Checker {
 	def isMatch(s: Checkable): Boolean
 	def regexPattern : String
+	val caseType: CaseType
 }
 
 case class ExactChecker(caseType: CaseType, text: String) extends Checker {
@@ -77,8 +78,6 @@ trait DatabaseRuleInfo {
 	val exact: Boolean
 	val regex: Boolean
 }
-
-
 
 trait Rule {
   def isMatch(s: Checkable): Boolean
@@ -137,9 +136,9 @@ class FlatRuleSystem(initialRules: Traversable[DatabaseRule]) extends RuleSystem
 	}
 	protected def statsPerRuleType(rs: Traversable[DatabaseRule]):String = statsPerCheckerType(rs.map(rule => rule.checker))
 	def ruleStats: Traversable[String] = {
-		val cased = rules.groupBy( _.caseType)
-		Seq("Case sensitive: "+statsPerRuleType(cased.getOrElse(CaseSensitive, Set())),
-			  "Case insensitive: "+statsPerRuleType(cased.getOrElse(CaseInsensitive, Set())))
+		val cased = rules.groupBy( _.caseType).withDefaultValue(Set())
+		Seq("Case sensitive: "+statsPerRuleType(cased(CaseSensitive)),
+			  "Case insensitive: "+statsPerRuleType(cased(CaseInsensitive)))
 	}
 	def stats: Traversable[String] = {
 		Seq( (Seq(this.getClass, "with", "total", rules.size, "rules").mkString(" "))) ++ ruleStats
@@ -147,35 +146,30 @@ class FlatRuleSystem(initialRules: Traversable[DatabaseRule]) extends RuleSystem
 }
 
 class CombinedRuleSystem(initialRules: Traversable[DatabaseRule]) extends FlatRuleSystem(initialRules) {
-	val checkers:Seq[(CaseType, Checker)] = { // this block is there to make variables used inside temporary
-		val exactCs = new collection.mutable.HashSet[String]
-		val exactCi = new collection.mutable.HashSet[String]
-		val cs = new collection.mutable.HashSet[String]
-		val ci = new collection.mutable.HashSet[String]
-		rules.foreach( rule => rule.checker match {
-			case c:ExactChecker => if (rule.caseType==CaseSensitive) { exactCs += c.text } else { exactCi += c.text }
-			case c:Checker => if (rule.caseType==CaseSensitive) { cs += c.regexPattern } else { ci += c.regexPattern }
+	val checkers:Traversable[Checker] = {
+	// this block is there to make variables used inside temporary
+		type func = Traversable[DatabaseRule] => Checker
+		// using those functions as keys in the map "sets"
+		val exactCs:func = texts => new SetExactChecker(CaseSensitive, texts.map(rule => rule.text).toSet)
+		val exactCi:func = texts => new SetExactChecker(CaseInsensitive, texts.map(rule => rule.text).toSet)
+		val cs: func = texts =>  new RegexChecker(CaseSensitive, texts.map(rule => rule.checker.regexPattern).mkString("|"))
+	  val ci: func = texts =>  new RegexChecker(CaseInsensitive, texts.map(rule => rule.checker.regexPattern).mkString("|"))
+		val sets = rules.groupBy( rule => rule.checker match {
+			case c:ExactChecker => if (rule.caseType==CaseSensitive) exactCs else exactCi
+			case c:Checker => if (rule.caseType==CaseSensitive) cs else ci
 		})
-		var result = List[ (CaseType, Checker) ]()
-		if (!exactCs.isEmpty) result = (CaseSensitive, new SetExactChecker(CaseSensitive, exactCs.toSet)) :: result
-		if (!exactCi.isEmpty) result = (CaseInsensitive, new SetExactChecker(CaseInsensitive, exactCi.toSet)) :: result
-		if (!cs.isEmpty) result = (CaseSensitive, new RegexChecker(CaseSensitive, cs.mkString("|"))) :: result
-		if (!ci.isEmpty) result = (CaseInsensitive, new RegexChecker(CaseInsensitive, ci.mkString("|"))) :: result
-		result.toSeq
+		sets.toSeq.map( pair => pair._1(pair._2))
 	}
 	override def copy(rules: Traversable[DatabaseRule]) = new CombinedRuleSystem(rules)
-  override def isMatch(s: Checkable): Boolean = {
-    checkers.exists( (pair: (CaseType, Checker)) => {
-	    val (caseType: CaseType, checker: Checker) = pair
-	    checker.isMatch(s)
-    })
-  }
-  override def allMatches(s: Checkable) = rules flatMap { _.allMatches(s) }
-  override def combineRules: CombinedRuleSystem = this
+	override def isMatch(s: Checkable): Boolean = {
+		checkers.exists( checker => {  checker.isMatch(s) })
+	}
+	override def allMatches(s: Checkable) = rules flatMap { _.allMatches(s) }
+	override def combineRules: CombinedRuleSystem = this
 	override def ruleStats: Traversable[String] = {
-		val cased = checkers.groupBy( _._1)
-		Seq("Case sensitive: "+statsPerCheckerType(cased.getOrElse(CaseSensitive, Seq()).map( pair => pair._2)),
-			"Case insensitive: "+statsPerCheckerType(cased.getOrElse(CaseInsensitive, Seq()).map( pair => pair._2)))
+	val cased = checkers.groupBy( checker => checker.caseType).withDefaultValue(Seq())
+		Seq("Case sensitive: "+statsPerCheckerType(cased(CaseSensitive)),
+			  "Case insensitive: "+statsPerCheckerType(cased(CaseInsensitive)))
 	}
 	override def statsSummary(c:Checker):String = {
 		c match {
@@ -238,7 +232,7 @@ object RuleSystem {
 	}
 	def fromDatabase(db: org.jooq.FactoryOperations):Map[String,FlatRuleSystem] = {
 		val (result, _)= createRules(dbRows(db, None))
-		result.mapValues( rules => new FlatRuleSystem(rules).combineRules )
+		result.mapValues( rules => new CombinedRuleSystem(rules) )
 	}
 
 	def reloadSome(db: org.jooq.FactoryOperations, oldMap: Map[String, RuleSystem], changedIds: Set[Int]): Map[String, RuleSystem] = {
