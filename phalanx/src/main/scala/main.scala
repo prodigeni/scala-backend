@@ -26,8 +26,8 @@ object Respond {
 	def failure = Respond("failure\n")
 }
 
-class MainService(var rules: Map[String,RuleSystem], val reloader: Map[String, RuleSystem] => Map[String, RuleSystem]) extends Service[Request, Response] {
-	def this(rules: Map[String, RuleSystem]) = this(rules, x => x)
+class MainService(var rules: Map[String,RuleSystem], val reloader: (Map[String, RuleSystem], Traversable[Int]) => Map[String, RuleSystem]) extends Service[Request, Response] {
+	def this(rules: Map[String, RuleSystem]) = this(rules, (x,y) => x)
 	val logger = LoggerFactory.getLogger(classOf[MainService])
 	val threaded = FuturePool.defaultPool
   def selectRuleSystem(request: Request):Option[RuleSystem] = {
@@ -36,9 +36,9 @@ class MainService(var rules: Map[String,RuleSystem], val reloader: Map[String, R
       case None => None
     }
   }
-	def handleCheckOrMatch(func: (RuleSystem, String)=> Response)(request: Request):Response = selectRuleSystem(request) match {
-		case None => Respond.error("Unknown type parameter")
-		case Some(ruleSystem:RuleSystem) => {
+	def handleCheckOrMatch(func: (RuleSystem, String)=> Response)(request: Request):Future[Response] = selectRuleSystem(request) match {
+		case None => Future(Respond.error("Unknown type parameter"))
+		case Some(ruleSystem:RuleSystem) => threaded {
 			request.params.get("content") match {
 				case None => Respond.error("content parameter is missing")
 				case Some(s:String) => ( { func(ruleSystem, s) } )
@@ -71,10 +71,13 @@ class MainService(var rules: Map[String,RuleSystem], val reloader: Map[String, R
   def apply(request: Request):Future[Response] = {
     Path(request.path) match {
       case Root => Future(Respond("PHALANX ALIVE"))
-      case Root / "check" => threaded { handleCheck(request) }
-      case Root / "match" => threaded { handleMatch(request) }
+      case Root / "check" => handleCheck(request)
+      case Root / "match" => handleMatch(request)
       case Root / "validate" => threaded { validateRegex(request) }
-      case Root / "reload" => threaded( { reloader(rules) } ) map( newRules => {
+      case Root / "reload" => threaded( {
+	        val ids = for (x<-request.getParam("changed", "").split(',')) yield x.toInt
+		      reloader(rules,ids)
+        }) map( newRules => {
 		      rules = newRules
 		      Respond("reloaded")
 	      })
@@ -89,7 +92,7 @@ object Main extends App {
 	val logger = LoggerFactory.getLogger("Main")
 	logger.info("Loading rules from database")
 	val db = new DB (DB.DB_MASTER, "", "wikicities").connect()
-	val mainService = new MainService(RuleSystem.fromDatabase(db), _ => RuleSystem.fromDatabase(db)) // todo: reload only changed rules
+	val mainService = new MainService(RuleSystem.fromDatabase(db), (old, changed) => RuleSystem.reloadSome(db, old, changed.toSet)) // todo: reload only changed rules
   val port = Option(System getenv "PORT") match {
     case Some(p) => p.toInt
     case None => 8080

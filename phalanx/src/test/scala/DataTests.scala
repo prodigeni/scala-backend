@@ -26,8 +26,8 @@ class DataTests extends FlatSpec {
   "First id" should "be 1" in { assert(rules.head.dbId === 1) }
   "Last id" should "be 4014" in { assert(rules.last.dbId === 4014) }
 
-  "RuleSystem" should "work" in {
-    val rs = new RuleSystem(rules)
+  "FlatRuleSystem" should "work" in {
+    val rs = new FlatRuleSystem(rules)
     val crs =  rs.combineRules
     intercept[RuleViolation] { rs.check(Checkable("fuck"))}
     rs.check(Checkable("something else"))

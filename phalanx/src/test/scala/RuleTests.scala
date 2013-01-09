@@ -20,8 +20,8 @@ class RuleTests extends FlatSpec  {
     intercept[RuleViolation] { rule.check(Checkable("Other Something or else")) }
   }
 
-  "RuleSystem" should "combine rules" in {
-    val orig = new RuleSystem(List(Rule.exact("lamb"), Rule.contains("Mary")))
+  "FlatRuleSystem" should "combine rules" in {
+    val orig = new FlatRuleSystem(List(Rule.exact("lamb"), Rule.contains("Mary")))
     val ruleSystems = Seq(orig, orig.combineRules)
     ruleSystems.foreach( rule => {
       rule.check(Checkable("wolf"))
