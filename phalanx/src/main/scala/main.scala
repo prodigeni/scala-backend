@@ -10,7 +10,7 @@ import com.wikia.wikifactory._
 import java.util.regex.PatternSyntaxException
 import org.codehaus.jackson.map.ObjectMapper
 import org.jboss.netty.handler.codec.http.HttpResponseStatus
-import org.slf4j.{Logger, LoggerFactory}
+import org.slf4j.LoggerFactory
 
 object Respond {
   val jsonMapper = new ObjectMapper()
