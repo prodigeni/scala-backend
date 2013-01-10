@@ -207,7 +207,6 @@ object RuleSystem {
 
 	def makeDbInfo(row:PhalanxRecord) = {
 		val lang = row.getPLang
-		if (lang != null && !lang.isEmpty) logger.info("Got lang: "+lang)
 		new DatabaseRule(new String(row.getPText, "utf-8"), row.getPId.intValue(), new String(row.getPReason, "utf-8"),
 			row.getPCase == 1,row.getPExact == 1, row.getPRegex == 1, if (lang == null || lang.isEmpty) None else Some(lang))
 	}

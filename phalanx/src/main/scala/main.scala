@@ -22,8 +22,8 @@ object Respond {
   }
   def json(data: Any) = Respond(jsonMapper.writeValueAsString(data), Status.Ok, Message.ContentTypeJson)
   def error(info: String, status: HttpResponseStatus = Status.InternalServerError) = Respond(info+"\n", status)
-	def ok = Respond("ok\n")
-	def failure = Respond("failure\n")
+	def ok(s:String = "") = Respond("ok\n"+s)
+	def failure(s:String = "") = Respond("failure\n"+s)
 }
 
 class MainService(var rules: Map[String,RuleSystem], val reloader: (Map[String, RuleSystem], Traversable[Int]) => Map[String, RuleSystem]) extends Service[Request, Response] {
@@ -46,7 +46,7 @@ class MainService(var rules: Map[String,RuleSystem], val reloader: (Map[String, 
 		}
 	}
 	val handleCheck = handleCheckOrMatch( (ruleSystem, c) => {
-		if (ruleSystem.isMatch(c)) Respond.failure else Respond.ok
+		if (ruleSystem.isMatch(c)) Respond.failure() else Respond.ok()
 	}) _
 	val handleMatch = handleCheckOrMatch( (ruleSystem, c) => {
 		val matches = ruleSystem.allMatches(c).map( r => r.dbId)
@@ -56,9 +56,9 @@ class MainService(var rules: Map[String,RuleSystem], val reloader: (Map[String, 
 		val s = request.params.getOrElse("regex", "")
 		try {
 			s.r
-			Respond.ok
+			Respond.ok()
 		} catch {
-			case e:PatternSyntaxException => Respond.failure
+			case e:PatternSyntaxException => Respond.failure()
 		}
 	}
 	def stats = {
@@ -74,13 +74,13 @@ class MainService(var rules: Map[String,RuleSystem], val reloader: (Map[String, 
       case Root / "check" => handleCheck(request)
       case Root / "match" => handleMatch(request)
       case Root / "validate" => threaded { validateRegex(request) }
-      case Root / "reload" => threaded( {
-	        val ids = for (x<-request.getParam("changed", "").split(',')) yield x.toInt
-		      reloader(rules,ids)
-        }) map( newRules => {
+      case Root / "reload" => {
+	      val ids = for (x<-request.getParam("changed", "").split(',')) yield x.toInt
+         threaded( { reloader(rules,ids) }) map( newRules => {
 		      rules = newRules
-		      Respond("reloaded")
+		      Respond.ok()
 	      })
+      }
       case Root / "stats" => threaded { Respond(stats) }
       case _ => Future(Respond.error("not found", Status.NotFound))
     }

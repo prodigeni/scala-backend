@@ -1,4 +1,6 @@
-This repository is base for submodules. When you clone this repo you'll clone submodules as well.
+This repository contains various back-end projects written in Scala language. 
 
-Current submodules:
-* scala-wikifactory as wikifactory
+Projects:
+* wikifactory is a library to easily access current wikifarm data
+* phalanx is a new spam/user blocking service
+
