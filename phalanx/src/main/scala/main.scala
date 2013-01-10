@@ -36,20 +36,20 @@ class MainService(var rules: Map[String,RuleSystem], val reloader: (Map[String, 
       case None => None
     }
   }
-	def handleCheckOrMatch(func: (RuleSystem, String)=> Response)(request: Request):Future[Response] = selectRuleSystem(request) match {
+	def handleCheckOrMatch(func: (RuleSystem, Checkable)=> Response)(request: Request):Future[Response] = selectRuleSystem(request) match {
 		case None => Future(Respond.error("Unknown type parameter"))
 		case Some(ruleSystem:RuleSystem) => threaded {
 			request.params.get("content") match {
 				case None => Respond.error("content parameter is missing")
-				case Some(s:String) => ( { func(ruleSystem, s) } )
+				case Some(s:String) => ( { func(ruleSystem, Checkable(s, request.params.getOrElse("lang", "en"))) } )
 			}
 		}
 	}
-	val handleCheck = handleCheckOrMatch( (ruleSystem, s) => {
-		if (ruleSystem.isMatch(Checkable(s))) Respond.failure else Respond.ok
+	val handleCheck = handleCheckOrMatch( (ruleSystem, c) => {
+		if (ruleSystem.isMatch(c)) Respond.failure else Respond.ok
 	}) _
-	val handleMatch = handleCheckOrMatch( (ruleSystem, s) => {
-		val matches = ruleSystem.allMatches(Checkable(s)).map( r => r.dbId)
+	val handleMatch = handleCheckOrMatch( (ruleSystem, c) => {
+		val matches = ruleSystem.allMatches(c).map( r => r.dbId)
 		Respond.json(matches.toArray[Int])
 	}) _
 	def validateRegex(request: Request) = {
