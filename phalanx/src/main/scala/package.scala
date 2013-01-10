@@ -4,12 +4,12 @@ import collection.{mutable, immutable}
 
 package object phalanx {
   implicit def string2Checkable(s:String): Checkable = new Checkable(s)
-	implicit def traversable2Group[A, T <: Traversable[A]](obj: T):RichTraversableGroup[A] = new RichTraversableGroup(obj)
+	implicit def iterable2Group[A, T <: Iterable[A]](obj: T):RichIterableGroup[A] = new RichIterableGroup(obj)
 }
 
-class RichTraversableGroup[A](val obj: Traversable[A]) {
+class RichIterableGroup[A](val obj: Iterable[A]) {
 	// adapted from TraversableLike.groupBy
-	def groupMap[K,R](f: A => (K,R)): Map[K, Traversable[R]] = {
+	def groupMap[K,R](f: A => (K,R)): Map[K, Iterable[R]] = {
 		val m = mutable.Map.empty[K, mutable.ListBuffer[R]]
 		for (elem <- obj) {
 			val (key, value) = f(elem)
@@ -22,7 +22,7 @@ class RichTraversableGroup[A](val obj: Traversable[A]) {
 		val counter = mutable.Map.empty[K, Int].withDefaultValue(0)
 		for (elem <- obj) {
 			val key = f(elem)
-			counter.update(key, counter(key) + 1)
+			counter(key) = counter(key) + 1
 		}
 		counter.toMap
 	}

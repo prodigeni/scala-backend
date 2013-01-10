@@ -22,19 +22,19 @@ class CSVFile(fileName: String, charset: String = "UTF-8", separator: Char = ','
 
 class DataTests extends FlatSpec {
 	val rules = DataTests.rules
-  "There" should "be 1000 rules" in { assert(rules.length === 1000) }
-  "First id" should "be 1" in { assert(rules.head.dbId === 1) }
-  "Last id" should "be 4014" in { assert(rules.last.dbId === 4014) }
+  "Loaded rules " should "have 1000 rules" in { assert(rules.length === 1000) }
+  it should "have first id 1" in { assert(rules.head.dbId === 1) }
+  it should "have last id 4014" in { assert(rules.last.dbId === 4014) }
 
-  "FlatRuleSystem" should "work" in {
-    val rs = new FlatRuleSystem(rules)
-    val crs =  rs.combineRules
-    intercept[RuleViolation] { rs.check(Checkable("fuck"))}
-    rs.check(Checkable("something else"))
-    crs.check(Checkable("something else"))
+	def checkSystem(rs:RuleSystem) {
+		intercept[RuleViolation] { rs.check(Checkable("fuck"))}
+		rs.check(Checkable("something else"))
+		rs.stats
+	}
 
-
-  }
+	val rs = new FlatRuleSystem(rules)
+  "RuleSystem" should "should work Flat" in { checkSystem(rs) }
+	it should "also work Combined" in { checkSystem(rs.combineRules) }
 }
 
 object DataTests {
@@ -43,10 +43,10 @@ object DataTests {
 	lazy val rules = csv.map(arr => {
 			val Array(p_id:String, p_type:String, p_exact:String, p_regex:String, p_case:String, p_text:String) = arr
 			try {
-				new DatabaseRule(p_text,  p_id.toInt, "", p_case == "1", p_exact == "1", p_regex == "1")
+				new DatabaseRule(p_text, p_id.toInt, "", p_case == "1", p_exact == "1", p_regex == "1", None)
 			}
 			catch {
-				case e => {
+				case e:Throwable => {
 					printf("Could not create rule number: %s\n", p_id)
 					throw e
 				}
