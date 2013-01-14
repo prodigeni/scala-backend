@@ -18,9 +18,6 @@ resolvers += "scala-tools.org" at "http://scala-tools.org/repo-releases"
 
 resolvers += "Wikia Maven repository" at "http://pkg-s1.wikia-prod/maven/releases/"
 
-resolvers += "Local Ivy Repository" at "file://"+Path.userHome.absolutePath+"/.ivy2/local"
-
-
 publishMavenStyle := true
 
 publishTo <<= (version) { version: String =>
@@ -36,15 +33,12 @@ publishTo <<= (version) { version: String =>
 }
 
 libraryDependencies ++= Seq(
-  "com.wikia" %% "wikifactory" % "0.1",
+  "com.wikia" %% "wikifactory" % "0.3",
   "com.twitter" % "finagle-core" % "5.3.1",
   "com.twitter" % "finagle-http" % "5.3.1",
   "org.codehaus.jackson" % "jackson-mapper-asl" % "1.9.11",
   "org.scalatest" %% "scalatest" % "1.8" % "test",
   "net.sf.opencsv" % "opencsv" % "2.0" % "test",
-  "org.apache.thrift" % "libthrift" % "0.9.0",
-  "org.apache.thrift" % "libfb303" % "0.9.0",
-  "com.wikia" % "scribe-thrift-client" % "2.2",
   "org.slf4j" % "slf4j-simple" % "1.7.2"
 )
 

@@ -35,4 +35,3 @@ libraryDependencies ++= Seq(
     "org.apache.thrift" % "libfb303" % "0.9.0",
     "com.ning" % "metrics.eventtracker-scribe" % "4.1.2"
 )
-

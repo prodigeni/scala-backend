@@ -13,6 +13,8 @@ import java.sql.DriverManager
 import org.jooq._
 import org.jooq.impl._
 import org.jooq.impl.Factory._
+import java.text.{ParsePosition, FieldPosition, DateFormat}
+import java.util.Date
 
 object DB {
   val DB_MASTER       : Int = -2
@@ -25,9 +27,32 @@ object DB {
 
   val DB_SPECIALS     = List("smw+")
 
-  val mediaWikiTimeFormat:java.text.DateFormat = new java.text.SimpleDateFormat("yyyyMMddHHmmss")
-  def wikiCurrentTime =  wikiTime(new java.util.Date())
-  def wikiTime(date: java.util.Date) = mediaWikiTimeFormat.format(date)
+  val dbTimeZone = java.util.TimeZone.getTimeZone("UTC")
+  val mediaWikiTimeFormat:java.text.DateFormat = {
+    val f = new java.text.SimpleDateFormat("yyyyMMddHHmmss")
+    val cal = java.util.Calendar.getInstance(dbTimeZone)
+    f.setCalendar(cal)
+    f.setTimeZone(dbTimeZone)
+    f.setLenient(false)
+    f
+  }
+
+
+  def wikiCurrentTime = toWikiTime(new java.util.Date())
+  def toWikiTime(date: java.util.Date) = mediaWikiTimeFormat.format(date)
+  def fromWikiTime(dateBytes: Array[Byte]):Option[java.util.Date] = {
+    if (dateBytes == null) {
+      None
+    } else {
+      val text = new String(dateBytes, "ascii")
+      Some(mediaWikiTimeFormat.parse(text))
+    }
+  }
+  def fromWikiTime(date: String):Option[java.util.Date] = {
+    val bytes:Array[Byte] = date.toCharArray.map( x => x.toByte)
+    fromWikiTime(bytes)
+  }
+
 }
 
 case class dbException( msg:String ) extends Exception
