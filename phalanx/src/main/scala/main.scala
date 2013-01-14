@@ -5,41 +5,38 @@ import com.twitter.finagle.builder.ServerBuilder
 import com.twitter.finagle.http.filter.ExceptionFilter
 import com.twitter.finagle.http.path._
 import com.twitter.finagle.http.{Http, RichHttp, Request, Status, Version, Response, Message}
+import com.twitter.finagle.util.TimerFromNettyTimer
 import com.twitter.util.{Time, TimerTask, FuturePool, Future}
 import com.wikia.wikifactory._
 import java.util.regex.PatternSyntaxException
+import java.util.{Calendar, Date}
 import org.codehaus.jackson.map.ObjectMapper
 import org.jboss.netty.handler.codec.http.HttpResponseStatus
-import org.slf4j.LoggerFactory
-import java.util.{Calendar, Date}
 import org.jboss.netty.util.HashedWheelTimer
-import com.twitter.concurrent.NamedPoolThreadFactory
-import java.util.concurrent.TimeUnit
-import com.twitter.finagle.util.TimerFromNettyTimer
+import org.slf4j.LoggerFactory
 
 object Respond {
-  val jsonMapper = new ObjectMapper()
-  def apply(content: String, status: HttpResponseStatus = Status.Ok, contentType: String = "text/plain; charset=utf-8") = {
-    val response = Response(Version.Http11, status)
-    response.contentType = contentType
-    response.contentString = content
-	  response
-  }
-  def json(data: Any) = Respond(jsonMapper.writeValueAsString(data), Status.Ok, Message.ContentTypeJson)
-  def error(info: String, status: HttpResponseStatus = Status.InternalServerError) = Respond(info+"\n", status)
-	def ok(s:String = "") = Respond("ok\n"+s)
-	def failure(s:String = "") = Respond("failure\n"+s)
+	val jsonMapper = new ObjectMapper()
+	def apply(content: String, status: HttpResponseStatus = Status.Ok, contentType: String = "text/plain; charset=utf-8") = {
+		val response = Response(Version.Http11, status)
+		response.contentType = contentType
+		response.contentString = content
+		response
+	}
+	def json(data: Any) = Respond(jsonMapper.writeValueAsString(data), Status.Ok, Message.ContentTypeJson)
+	def error(info: String, status: HttpResponseStatus = Status.InternalServerError) = Respond(info + "\n", status)
+	def ok(s: String = "") = Respond("ok\n" + s)
+	def failure(s: String = "") = Respond("failure\n" + s)
 }
 
-class MainService(var rules: Map[String,RuleSystem], val reloader: (Map[String, RuleSystem], Traversable[Int]) => Map[String, RuleSystem]) extends Service[Request, Response] {
-	def this(rules: Map[String, RuleSystem]) = this(rules, (x,y) => x)
+class MainService(var rules: Map[String, RuleSystem], val reloader: (Map[String, RuleSystem], Traversable[Int]) => Map[String, RuleSystem]) extends Service[Request, Response] {
+	def this(rules: Map[String, RuleSystem]) = this(rules, (x, y) => x)
 	val logger = LoggerFactory.getLogger(classOf[MainService])
 	val threaded = FuturePool.defaultPool
-	var nextExpireDate:Option[Date] = None
-	var expireWatchTask:Option[TimerTask] = None
+	var nextExpireDate: Option[Date] = None
+	var expireWatchTask: Option[TimerTask] = None
 	val timer = new TimerFromNettyTimer(new HashedWheelTimer())
 	watchExpired()
-
 
 	override def release() {
 		logger.info("Stopping expired timer")
@@ -47,9 +44,9 @@ class MainService(var rules: Map[String,RuleSystem], val reloader: (Map[String, 
 	}
 
 	def watchExpired() {
-		val minDates = rules.values.flatMap ( ruleSystem => ruleSystem.expiring.headOption.map( rule => rule.expires.get ) )
-		expireWatchTask.map( task => {
-			logger.info("Old expire task "+task+"cancelled")
+		val minDates = rules.values.flatMap(ruleSystem => ruleSystem.expiring.headOption.map(rule => rule.expires.get))
+		expireWatchTask.map(task => {
+			logger.info("Old expire task " + task + "cancelled")
 			task.cancel()
 		})
 		if (minDates.isEmpty) {
@@ -62,41 +59,48 @@ class MainService(var rules: Map[String,RuleSystem], val reloader: (Map[String, 
 			c.set(Calendar.SECOND, 0)
 			c.add(Calendar.MINUTE, 1)
 			nextExpireDate = Some(c.getTime)
-			expireWatchTask = Some(timer.schedule(Time(nextExpireDate.get)) { expire() })
-			logger.info("Scheduling expire task at "+nextExpireDate.get)
+			expireWatchTask = Some(timer.schedule(Time(nextExpireDate.get)) {
+				expire()
+			})
+			logger.info("Scheduling expire task at " + nextExpireDate.get)
 		}
 	}
-	def expire() {      // todo: somehow run this on main finagle thread?
+	def expire() {
+		// todo: somehow run this on main finagle thread?
 		val now = new Date().getTime
-		val expired = rules.values.flatMap ( ruleSystem => ruleSystem.expiring.takeWhile( rule => rule.expires.get.getTime <= now) ).map(r => r.dbId)
+		val expired = rules.values.flatMap(ruleSystem => ruleSystem.expiring.takeWhile(rule => rule.expires.get.getTime <= now)).map(r => r.dbId)
 		afterReload(expired)
 	}
-	def afterReload(expired:Traversable[Int]):Future[Unit] = {
-		threaded( { reloader(rules,expired) }) map( newRules => {
+	def afterReload(expired: Traversable[Int]): Future[Unit] = {
+		threaded({
+			reloader(rules, expired)
+		}) map (newRules => {
 			rules = newRules
 			watchExpired()
 		})
 	}
-  def selectRuleSystem(request: Request):Option[RuleSystem] = {
-    request.params.get("type") match {
-      case Some(s:String) => rules.get(s)
-      case None => None
-    }
-  }
-	def handleCheckOrMatch(func: (RuleSystem, Checkable)=> Response)(request: Request):Future[Response] = selectRuleSystem(request) match {
+	def selectRuleSystem(request: Request): Option[RuleSystem] = {
+		request.params.get("type") match {
+			case Some(s: String) => rules.get(s)
+			case None => None
+		}
+	}
+	def handleCheckOrMatch(func: (RuleSystem, Checkable) => Response)(request: Request): Future[Response] = selectRuleSystem(request) match {
 		case None => Future(Respond.error("Unknown type parameter"))
-		case Some(ruleSystem:RuleSystem) => threaded {
+		case Some(ruleSystem: RuleSystem) => threaded {
 			request.params.get("content") match {
 				case None => Respond.error("content parameter is missing")
-				case Some(s:String) => ( { func(ruleSystem, Checkable(s, request.params.getOrElse("lang", "en"))) } )
+				case Some(s: String) => ({
+					func(ruleSystem, Checkable(s, request.params.getOrElse("lang", "en")))
+				})
 			}
 		}
 	}
-	val handleCheck = handleCheckOrMatch( (ruleSystem, c) => {
+	val handleCheck = handleCheckOrMatch((ruleSystem, c) => {
 		if (ruleSystem.isMatch(c)) Respond.failure() else Respond.ok()
 	}) _
-	val handleMatch = handleCheckOrMatch( (ruleSystem, c) => {
-		val matches = ruleSystem.allMatches(c).map( r => r.dbId)
+	val handleMatch = handleCheckOrMatch((ruleSystem, c) => {
+		val matches = ruleSystem.allMatches(c).map(r => r.dbId)
 		Respond.json(matches.toArray[Int])
 	}) _
 	def validateRegex(request: Request) = {
@@ -105,30 +109,36 @@ class MainService(var rules: Map[String,RuleSystem], val reloader: (Map[String, 
 			s.r
 			Respond.ok()
 		} catch {
-			case e:PatternSyntaxException => Respond.failure()
+			case e: PatternSyntaxException => Respond.failure()
 		}
 	}
 	def stats = {
-		val response = (rules.toSeq.map( t => {
+		val response = (rules.toSeq.map(t => {
 			val (s, ruleSystem) = t
-			s + ":\n" + (ruleSystem.stats.map { "  "+ _ }.mkString("\n")) +"\n"
-		}) ++ Seq("Next rule expire date: "+nextExpireDate)).mkString("\n")
+			s + ":\n" + (ruleSystem.stats.map {
+				"  " + _
+			}.mkString("\n")) + "\n"
+		}) ++ Seq("Next rule expire date: " + nextExpireDate)).mkString("\n")
 		response
 	}
-  def apply(request: Request):Future[Response] = {
-    Path(request.path) match {
-      case Root => Future(Respond("PHALANX ALIVE"))
-      case Root / "check" => handleCheck(request)
-      case Root / "match" => handleMatch(request)
-      case Root / "validate" => threaded { validateRegex(request) }
-      case Root / "reload" => {
-	      val ids = for (x<-request.getParam("changed", "").split(',')) yield x.toInt
-	      afterReload(ids).map( _ => Respond.ok() )
-      }
-      case Root / "stats" => threaded { Respond(stats) }
-      case _ => Future(Respond.error("not found", Status.NotFound))
-    }
-  }
+	def apply(request: Request): Future[Response] = {
+		Path(request.path) match {
+			case Root => Future(Respond("PHALANX ALIVE"))
+			case Root / "check" => handleCheck(request)
+			case Root / "match" => handleMatch(request)
+			case Root / "validate" => threaded {
+				validateRegex(request)
+			}
+			case Root / "reload" => {
+				val ids = for (x <- request.getParam("changed", "").split(',')) yield x.toInt
+				afterReload(ids).map(_ => Respond.ok())
+			}
+			case Root / "stats" => threaded {
+				Respond(stats)
+			}
+			case _ => Future(Respond.error("not found", Status.NotFound))
+		}
+	}
 }
 
 object Main extends App {
@@ -138,20 +148,21 @@ object Main extends App {
 	System.setProperty("org.slf4j.simpleLogger.log.com.wikia.phalanx.MainService", "info")
 	val logger = LoggerFactory.getLogger("Main")
 	logger.info("Loading rules from database")
-	val db = new DB (DB.DB_MASTER, "", "wikicities").connect()
-	val mainService = new MainService(RuleSystem.fromDatabase(db), (old, changed) => RuleSystem.reloadSome(db, old, changed.toSet)) // todo: reload only changed rules
-  val port = Option(System getenv "PORT") match {
-    case Some(p) => p.toInt
-    case None => 8080
-  }
+	val db = new DB(DB.DB_MASTER, "", "wikicities").connect()
+	val mainService = new MainService(RuleSystem.fromDatabase(db), (old, changed) => RuleSystem.reloadSome(db, old, changed.toSet))
+	// todo: reload only changed rules
+	val port = Option(System getenv "PORT") match {
+		case Some(p) => p.toInt
+		case None => 8080
+	}
 
-  val config =  ServerBuilder()
-    .codec(RichHttp[Request](Http()))
-    .name("Phalanx")
-    .bindTo(new java.net.InetSocketAddress(port))
+	val config = ServerBuilder()
+		.codec(RichHttp[Request](Http()))
+		.name("Phalanx")
+		.bindTo(new java.net.InetSocketAddress(port))
 
-  val server = config.build(ExceptionFilter andThen mainService)
-  logger.info("Server started on port: "+port)
-	logger.trace("Initial stats: \n"+mainService.stats)
+	val server = config.build(ExceptionFilter andThen mainService)
+	logger.info("Server started on port: " + port)
+	logger.trace("Initial stats: \n" + mainService.stats)
 }
 
