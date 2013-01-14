@@ -19,7 +19,7 @@ class RuleTests extends FlatSpec  {
     intercept[RuleViolation] { rule.check(Checkable("Something")) }
     intercept[RuleViolation] { rule.check(Checkable("Other Something or else")) }
   }
-	val orig = new FlatRuleSystem(List(Rule.exact("lamb"), Rule.contains("Mary"), Rule.contains("scheisse", cs = false, Some("de"))))
+	val orig = new FlatRuleSystem(List(Rule.exact("lamb"), Rule.contains("Mary"), Rule.contains("scheisse", false, Some("de"))))
 	def checkSystem(rule: RuleSystem) {
 		rule.check(Checkable("wolf"))
 		intercept[RuleViolation] { rule.check(Checkable("Mary has a lamb"))}

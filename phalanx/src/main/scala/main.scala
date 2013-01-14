@@ -5,12 +5,17 @@ import com.twitter.finagle.builder.ServerBuilder
 import com.twitter.finagle.http.filter.ExceptionFilter
 import com.twitter.finagle.http.path._
 import com.twitter.finagle.http.{Http, RichHttp, Request, Status, Version, Response, Message}
-import com.twitter.util.{FuturePool, Future}
+import com.twitter.util.{Time, TimerTask, FuturePool, Future}
 import com.wikia.wikifactory._
 import java.util.regex.PatternSyntaxException
 import org.codehaus.jackson.map.ObjectMapper
 import org.jboss.netty.handler.codec.http.HttpResponseStatus
 import org.slf4j.LoggerFactory
+import java.util.{Calendar, Date}
+import org.jboss.netty.util.HashedWheelTimer
+import com.twitter.concurrent.NamedPoolThreadFactory
+import java.util.concurrent.TimeUnit
+import com.twitter.finagle.util.TimerFromNettyTimer
 
 object Respond {
   val jsonMapper = new ObjectMapper()
@@ -30,6 +35,48 @@ class MainService(var rules: Map[String,RuleSystem], val reloader: (Map[String, 
 	def this(rules: Map[String, RuleSystem]) = this(rules, (x,y) => x)
 	val logger = LoggerFactory.getLogger(classOf[MainService])
 	val threaded = FuturePool.defaultPool
+	var nextExpireDate:Option[Date] = None
+	var expireWatchTask:Option[TimerTask] = None
+	val timer = new TimerFromNettyTimer(new HashedWheelTimer())
+	watchExpired()
+
+
+	override def release() {
+		logger.info("Stopping expired timer")
+		timer.stop()
+	}
+
+	def watchExpired() {
+		val minDates = rules.values.flatMap ( ruleSystem => ruleSystem.expiring.headOption.map( rule => rule.expires.get ) )
+		expireWatchTask.map( task => {
+			logger.info("Old expire task "+task+"cancelled")
+			task.cancel()
+		})
+		if (minDates.isEmpty) {
+			nextExpireDate = None
+			expireWatchTask = None
+			logger.info("Expire task not required")
+		} else {
+			val c = java.util.Calendar.getInstance(DB.dbTimeZone)
+			c.setTime(minDates.min)
+			c.set(Calendar.SECOND, 0)
+			c.add(Calendar.MINUTE, 1)
+			nextExpireDate = Some(c.getTime)
+			expireWatchTask = Some(timer.schedule(Time(nextExpireDate.get)) { expire() })
+			logger.info("Scheduling expire task at "+nextExpireDate.get)
+		}
+	}
+	def expire() {      // todo: somehow run this on main finagle thread?
+		val now = new Date().getTime
+		val expired = rules.values.flatMap ( ruleSystem => ruleSystem.expiring.takeWhile( rule => rule.expires.get.getTime <= now) ).map(r => r.dbId)
+		afterReload(expired)
+	}
+	def afterReload(expired:Traversable[Int]):Future[Unit] = {
+		threaded( { reloader(rules,expired) }) map( newRules => {
+			rules = newRules
+			watchExpired()
+		})
+	}
   def selectRuleSystem(request: Request):Option[RuleSystem] = {
     request.params.get("type") match {
       case Some(s:String) => rules.get(s)
@@ -62,10 +109,10 @@ class MainService(var rules: Map[String,RuleSystem], val reloader: (Map[String, 
 		}
 	}
 	def stats = {
-		val response = rules.toSeq.map( t => {
+		val response = (rules.toSeq.map( t => {
 			val (s, ruleSystem) = t
 			s + ":\n" + (ruleSystem.stats.map { "  "+ _ }.mkString("\n")) +"\n"
-		}).mkString("\n")
+		}) ++ Seq("Next rule expire date: "+nextExpireDate)).mkString("\n")
 		response
 	}
   def apply(request: Request):Future[Response] = {
@@ -76,10 +123,7 @@ class MainService(var rules: Map[String,RuleSystem], val reloader: (Map[String, 
       case Root / "validate" => threaded { validateRegex(request) }
       case Root / "reload" => {
 	      val ids = for (x<-request.getParam("changed", "").split(',')) yield x.toInt
-         threaded( { reloader(rules,ids) }) map( newRules => {
-		      rules = newRules
-		      Respond.ok()
-	      })
+	      afterReload(ids).map( _ => Respond.ok() )
       }
       case Root / "stats" => threaded { Respond(stats) }
       case _ => Future(Respond.error("not found", Status.NotFound))
@@ -88,7 +132,10 @@ class MainService(var rules: Map[String,RuleSystem], val reloader: (Map[String, 
 }
 
 object Main extends App {
-	System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "info") // todo: configurable instead?
+	// todo: make logging configurable instead?
+	System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "warn")
+	System.setProperty("org.slf4j.simpleLogger.log.Main", "info")
+	System.setProperty("org.slf4j.simpleLogger.log.com.wikia.phalanx.MainService", "info")
 	val logger = LoggerFactory.getLogger("Main")
 	logger.info("Loading rules from database")
 	val db = new DB (DB.DB_MASTER, "", "wikicities").connect()
@@ -105,6 +152,6 @@ object Main extends App {
 
   val server = config.build(ExceptionFilter andThen mainService)
   logger.info("Server started on port: "+port)
-	logger.info("Initial stats: \n"+mainService.stats)
+	logger.trace("Initial stats: \n"+mainService.stats)
 }
 

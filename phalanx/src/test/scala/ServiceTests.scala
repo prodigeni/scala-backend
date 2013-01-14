@@ -53,7 +53,13 @@ class ServiceTests extends FlatSpec  {
 		val response = client(request)()
 		val content = response.getContent.toString(charset)
 		assert(content === "failure\n")
+	}
 
+	it should "provide stats" in {
+		val request = RequestBuilder().url(address+"status").buildGet()
+		val response = client(request)()
+		val content = response.getContent.toString(charset)
+		assert(content != "failure\n")
 	}
 
 	"Server" should "shutdown" in {

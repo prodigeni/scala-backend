@@ -7,6 +7,7 @@ import java.util.regex.Pattern
 import org.slf4j.{Logger, LoggerFactory}
 import org.jooq.tools.unsigned.Unsigned
 import collection.mutable
+import java.util.Date
 
 class RuleViolation(val rules:Traversable[DatabaseRuleInfo]) extends Exception {
   def ruleIds = rules.map( rule => rule.dbId)
@@ -82,6 +83,7 @@ trait DatabaseRuleInfo {
 	val exact: Boolean
 	val regex: Boolean
 	val language: Option[String]
+	val expires: Option[Date]
 }
 
 trait Rule {
@@ -95,12 +97,12 @@ trait Rule {
 
 object Rule {
 	// simple test cases
-	def exact(text: String, cs:Boolean = true, lang:Option[String] = None) = new DatabaseRule(text, 0, "", cs, true, false, lang)
-	def regex(text: String, cs:Boolean = true, lang:Option[String] = None) = new DatabaseRule(text, 0, "", cs, false, true, lang)
-	def contains(text: String, cs:Boolean = true, lang:Option[String] = None) = new DatabaseRule(text, 0, "", cs, false, false, lang)
+	def exact(text: String, cs:Boolean = true, lang:Option[String] = None, expires:Option[Date]=None) = new DatabaseRule(text, 0, "", cs, true, false, lang, expires)
+	def regex(text: String, cs:Boolean = true, lang:Option[String] = None, expires:Option[Date]=None) = new DatabaseRule(text, 0, "", cs, false, true, lang, expires)
+	def contains(text: String, cs:Boolean = true, lang:Option[String] = None, expires:Option[Date]=None) = new DatabaseRule(text, 0, "", cs, false, false, lang, expires)
 }
 
-case class DatabaseRule(text: String, dbId: Int, reason: String, caseSensitive: Boolean, exact: Boolean, regex: Boolean, language: Option[String]) extends DatabaseRuleInfo with Rule {
+case class DatabaseRule(text: String, dbId: Int, reason: String, caseSensitive: Boolean, exact: Boolean, regex: Boolean, language: Option[String], expires: Option[Date]) extends DatabaseRuleInfo with Rule {
 	val caseType = if (caseSensitive || DatabaseRuleInfo.letterPattern.findFirstIn(text).isEmpty) CaseSensitive else CaseInsensitive
 	val checker: Checker = {
 		if (regex) new RegexChecker(caseType, text) else {
@@ -115,10 +117,13 @@ trait RuleSystem extends Rule {
 	def combineRules: RuleSystem
 	def reloadRules(added: Iterable[DatabaseRule], deletedIds: Set[Int]): RuleSystem
 	def stats: Traversable[String]
+	def rules: Traversable[Rule]
+	def expiring: IndexedSeq[DatabaseRuleInfo]
 }
 
 class FlatRuleSystem(initialRules: Traversable[DatabaseRule]) extends RuleSystem {
   val rules = initialRules.toSet
+	val expiring = rules.filter( r => r.expires.isDefined).toIndexedSeq.sortBy( (r:DatabaseRuleInfo) => r.expires.get.getTime)
   def isMatch(s: Checkable): Boolean = rules.exists { _.isMatch(s) }
   def allMatches(s: Checkable) = rules flatMap { _.allMatches(s) }
   def combineRules: CombinedRuleSystem = new CombinedRuleSystem(rules)
@@ -207,8 +212,10 @@ object RuleSystem {
 
 	def makeDbInfo(row:PhalanxRecord) = {
 		val lang = row.getPLang
+		val date = row.getPExpire
+
 		new DatabaseRule(new String(row.getPText, "utf-8"), row.getPId.intValue(), new String(row.getPReason, "utf-8"),
-			row.getPCase == 1,row.getPExact == 1, row.getPRegex == 1, if (lang == null || lang.isEmpty) None else Some(lang))
+			row.getPCase == 1,row.getPExact == 1, row.getPRegex == 1, if (lang == null || lang.isEmpty) None else Some(lang), com.wikia.wikifactory.DB.fromWikiTime(date))
 	}
 	private def ruleBuckets = (for (v <- contentTypes.values) yield (v, collection.mutable.Set.empty[DatabaseRule])).toMap
 	private def dbRows(db: org.jooq.FactoryOperations, condition: Option[org.jooq.Condition]) : Seq[PhalanxRecord] = {

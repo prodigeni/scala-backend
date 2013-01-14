@@ -45,7 +45,7 @@ Examples:
 
 
 ### /match
-Paremeters are the same as for `/check`, but results will be a json list (potentially empty) of matching rules.
+Paremeters are the same as for `/check`, but results will be a json list (potentially empty) of matching rule ids.
 
 `> curl "http://localhost:8080/match?lang=en&type=content&content=hello"`
 

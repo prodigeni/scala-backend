@@ -43,7 +43,7 @@ object DataTests {
 	lazy val rules = csv.map(arr => {
 			val Array(p_id:String, p_type:String, p_exact:String, p_regex:String, p_case:String, p_text:String) = arr
 			try {
-				new DatabaseRule(p_text, p_id.toInt, "", p_case == "1", p_exact == "1", p_regex == "1", None)
+				new DatabaseRule(p_text, p_id.toInt, "", p_case == "1", p_exact == "1", p_regex == "1", None, None)
 			}
 			catch {
 				case e:Throwable => {
