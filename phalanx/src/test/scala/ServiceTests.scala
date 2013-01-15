@@ -13,8 +13,8 @@ class ServiceTests extends FlatSpec {
 	val charset = Charset.forName("utf-8")
 
 	val rules = DataTests.rules
-
-	val service = new MainService(Map(("tests", new FlatRuleSystem(rules).combineRules)))
+	val scribe = new ScribeBuffer()
+	val service = new MainService(Map(("tests", new FlatRuleSystem(rules).combineRules)), (x,y) => x, scribe)
 	val config = ServerBuilder()
 		.codec(RichHttp[Request](Http()))
 		.name("Phalanx")
