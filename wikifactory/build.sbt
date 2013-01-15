@@ -2,7 +2,7 @@ name := "wikifactory"
 
 organization := "com.wikia"
 
-version := "0.3"
+version := "0.4"
 
 scalaVersion := "2.9.2"
 
@@ -28,10 +28,10 @@ resolvers ++= Seq(
 libraryDependencies ++= Seq(
 	"org.jooq" % "jooq" % "2.6.1",
 	"org.yaml" % "snakeyaml" % "1.11",
-    "org.apache.logging.log4j" % "slf4j-impl" % "2.0-alpha2",
-	"org.scalatest" % "scalatest" % "1.3" % "test",
+	"org.apache.logging.log4j" % "slf4j-impl" % "2.0-alpha2",
+	"org.scalatest" %% "scalatest" % "1.8" % "test",
 	"mysql" % "mysql-connector-java" % "5.1.22",
-    "org.apache.thrift" % "libthrift" % "0.9.0",
-    "org.apache.thrift" % "libfb303" % "0.9.0",
-    "com.ning" % "metrics.eventtracker-scribe" % "4.1.2"
+	"org.apache.thrift" % "libthrift" % "0.9.0",
+	"org.apache.thrift" % "libfb303" % "0.9.0",
+	"com.ning" % "metrics.eventtracker-scribe" % "4.1.2"
 )
