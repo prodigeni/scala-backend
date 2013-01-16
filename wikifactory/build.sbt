@@ -28,7 +28,6 @@ resolvers ++= Seq(
 libraryDependencies ++= Seq(
 	"org.jooq" % "jooq" % "2.6.1",
 	"org.yaml" % "snakeyaml" % "1.11",
-    "org.apache.logging.log4j" % "slf4j-impl" % "2.0-alpha2",
 	"org.scalatest" % "scalatest" % "1.3" % "test",
 	"mysql" % "mysql-connector-java" % "5.1.22",
     "org.apache.thrift" % "libthrift" % "0.9.0",
