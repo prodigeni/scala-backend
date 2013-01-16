@@ -10,7 +10,7 @@ object wikifactoryTest extends App {
 
 	println( "test: " + resultQuery.fetch("city_last_timestamp").toString )
 
-  var sc = new ScribeLogger(9090).category("log_phalanx" )
+  var sc = new ScribeLogger().category("log_phalanx" )
     .send( HashMap(
       "blockId" -> 1,
       "blockType" -> 1,

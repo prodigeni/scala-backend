@@ -1,6 +1,6 @@
 package com.wikia.phalanx
 
-import com.twitter.finagle.Service
+import com.twitter.finagle.{SimpleFilter, Service}
 import com.twitter.finagle.builder.ServerBuilder
 import com.twitter.finagle.http.filter.ExceptionFilter
 import com.twitter.finagle.http.path._
@@ -10,27 +10,36 @@ import com.twitter.util.{Time, TimerTask, FuturePool, Future}
 import com.wikia.wikifactory._
 import java.util.regex.PatternSyntaxException
 import java.util.{Calendar, Date}
-import org.codehaus.jackson.map.ObjectMapper
+import util.parsing.json.{JSONArray, JSONFormat}
 import org.jboss.netty.handler.codec.http.HttpResponseStatus
 import org.jboss.netty.util.HashedWheelTimer
-import org.slf4j.LoggerFactory
+import org.slf4j.{LoggerFactory, Logger}
+
+class ExceptionLogger[Req,Rep](val logger: Logger) extends SimpleFilter[Req, Rep] {
+	def this(loggerName: String) = this(LoggerFactory.getLogger(loggerName))
+	def apply(request: Req, service: Service[Req, Rep]): Future[Rep] = {
+		service(request).onFailure( (exception) => {
+			logger.error("Exception in service" , exception)
+		})
+	}
+}
 
 object Respond {
-	val jsonMapper = new ObjectMapper()
 	def apply(content: String, status: HttpResponseStatus = Status.Ok, contentType: String = "text/plain; charset=utf-8") = {
 		val response = Response(Version.Http11, status)
 		response.contentType = contentType
 		response.contentString = content
 		response
 	}
-	def json(data: Any) = Respond(jsonMapper.writeValueAsString(data), Status.Ok, Message.ContentTypeJson)
+	def json(data: Traversable[Int]) = Respond(JSONArray(data.toList).toString(JSONFormat.defaultFormatter), Status.Ok, Message.ContentTypeJson)
 	def error(info: String, status: HttpResponseStatus = Status.InternalServerError) = Respond(info + "\n", status)
 	def ok(s: String = "") = Respond("ok\n" + s)
 	def failure(s: String = "") = Respond("failure\n" + s)
 }
 
-class MainService(var rules: Map[String, RuleSystem], val reloader: (Map[String, RuleSystem], Traversable[Int]) => Map[String, RuleSystem]) extends Service[Request, Response] {
-	def this(rules: Map[String, RuleSystem]) = this(rules, (x, y) => x)
+
+class MainService(var rules: Map[String, RuleSystem], val reloader: (Map[String, RuleSystem], Traversable[Int]) => Map[String, RuleSystem], val scribe:Service[Map[String, Any], Unit]) extends Service[Request, Response] {
+	//def this(rules: Map[String, RuleSystem]) = this(rules, (x, y) => x)
 	val logger = LoggerFactory.getLogger(classOf[MainService])
 	val threaded = FuturePool.defaultPool
 	var nextExpireDate: Option[Date] = None
@@ -41,6 +50,8 @@ class MainService(var rules: Map[String, RuleSystem], val reloader: (Map[String,
 	override def release() {
 		logger.info("Stopping expired timer")
 		timer.stop()
+		logger.info("Stopping scribe client")
+		scribe.release()
 	}
 
 	def watchExpired() {
@@ -101,7 +112,7 @@ class MainService(var rules: Map[String, RuleSystem], val reloader: (Map[String,
 	}) _
 	val handleMatch = handleCheckOrMatch((ruleSystem, c) => {
 		val matches = ruleSystem.allMatches(c).map(r => r.dbId)
-		Respond.json(matches.toArray[Int])
+		Respond.json(matches)
 	}) _
 	def validateRegex(request: Request) = {
 		val s = request.params.getOrElse("regex", "")
@@ -147,9 +158,13 @@ object Main extends App {
 	System.setProperty("org.slf4j.simpleLogger.log.Main", "info")
 	System.setProperty("org.slf4j.simpleLogger.log.com.wikia.phalanx.MainService", "info")
 	val logger = LoggerFactory.getLogger("Main")
-	logger.info("Loading rules from database")
+	logger.info("Creating scribe client")
+	//val scribe = new Scribe("dev-szumo", 1463).category("log_phalanx")
+	val scribe = new ScribeBuffer()
+	scribe(Map.empty)() // make sure we're connected
 	val db = new DB(DB.DB_MASTER, "", "wikicities").connect()
-	val mainService = new MainService(RuleSystem.fromDatabase(db), (old, changed) => RuleSystem.reloadSome(db, old, changed.toSet))
+	logger.info("Loading rules from database")
+	val mainService = new MainService(RuleSystem.fromDatabase(db), (old, changed) => RuleSystem.reloadSome(db, old, changed.toSet), new ExceptionLogger(logger) andThen scribe)
 	// todo: reload only changed rules
 	val port = Option(System getenv "PORT") match {
 		case Some(p) => p.toInt

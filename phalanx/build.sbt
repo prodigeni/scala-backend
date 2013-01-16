@@ -34,9 +34,10 @@ publishTo <<= (version) { version: String =>
 
 libraryDependencies ++= Seq(
   "com.wikia" %% "wikifactory" % "0.3",
+  "com.wikia" % "scribe-thrift-client" % "2.2",
   "com.twitter" % "finagle-core" % "5.3.1",
   "com.twitter" % "finagle-http" % "5.3.1",
-  "org.codehaus.jackson" % "jackson-mapper-asl" % "1.9.11",
+  "com.twitter" % "finagle-thrift" % "5.3.1",
   "org.scalatest" %% "scalatest" % "1.8" % "test",
   "net.sf.opencsv" % "opencsv" % "2.0" % "test",
   "org.slf4j" % "slf4j-simple" % "1.7.2"

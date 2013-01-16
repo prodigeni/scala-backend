@@ -1,10 +1,13 @@
 package com.wikia
 
 import collection.{mutable, immutable}
+import com.twitter.finagle.Service
 
 package object phalanx {
   implicit def string2Checkable(s:String): Checkable = new Checkable(s)
 	implicit def iterable2Group[A, T <: Iterable[A]](obj: T):RichIterableGroup[A] = new RichIterableGroup(obj)
+	type ScribeMap = Map[String, Any]
+	type ScribeWriter = Service[ScribeMap, Unit]
 }
 
 class RichIterableGroup[A](val obj: Iterable[A]) {

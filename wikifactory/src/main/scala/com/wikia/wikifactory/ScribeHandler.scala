@@ -22,7 +22,7 @@ object ScribeConf {
   val DEF_TIME : Int = 10
 }
 
-class ScribeLogger( val hostname: String, val port: Int, val timeout: Int ) {
+class ScribeLogger ( hostname: String, port: Int, timeout: Int ) {
   var data: String = ""
   var cat: String = _
 
@@ -58,4 +58,3 @@ class ScribeLogger( val hostname: String, val port: Int, val timeout: Int ) {
     case _ => { data = msg.toString(); log }
   }
 }
-
