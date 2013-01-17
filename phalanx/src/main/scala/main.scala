@@ -38,7 +38,8 @@ object Respond {
 }
 
 
-class MainService(var rules: Map[String, RuleSystem], val reloader: (Map[String, RuleSystem], Traversable[Int]) => Map[String, RuleSystem], val scribe:Service[Map[String, Any], Unit]) extends Service[Request, Response] {
+class MainService(var rules: Map[String, RuleSystem], val reloader: (Map[String, RuleSystem], Traversable[Int]) => Map[String, RuleSystem],
+                  val scribe:Service[Map[String, Any], Unit]) extends Service[Request, Response] {
 	//def this(rules: Map[String, RuleSystem]) = this(rules, (x, y) => x)
 	val logger = LoggerFactory.getLogger(classOf[MainService])
 	val threaded = FuturePool.defaultPool
@@ -159,12 +160,13 @@ object Main extends App {
 	System.setProperty("org.slf4j.simpleLogger.log.com.wikia.phalanx.MainService", "info")
 	val logger = LoggerFactory.getLogger("Main")
 	logger.info("Creating scribe client")
-	val scribe = new Scribe("localhost", 1463).category("log_phalanx")
+	val scribe = new ScribeClient("localhost", 1463)
 	//val scribe = new ScribeBuffer()
-	scribe(Map.empty)() // make sure we're connected
+	scribe(("test", Map(("somekey", "somevalue"))))() // make sure we're connected
 	val db = new DB(DB.DB_MASTER, "", "wikicities").connect()
 	logger.info("Loading rules from database")
-	val mainService = new MainService(RuleSystem.fromDatabase(db), (old, changed) => RuleSystem.reloadSome(db, old, changed.toSet), new ExceptionLogger(logger) andThen scribe)
+	val mainService = new MainService(RuleSystem.fromDatabase(db), (old, changed) => RuleSystem.reloadSome(db, old, changed.toSet),
+		new ExceptionLogger(logger) andThen scribe.category("log_phalanx"))
 	// todo: reload only changed rules
 	val port = Option(System getenv "PORT") match {
 		case Some(p) => p.toInt
