@@ -14,9 +14,9 @@ import util.parsing.json.{JSONFormat, JSONObject}
 class Scribe(host: String = "localhost", port:Int = 1463) extends Service[(String, Map[String, Any]), Unit] {
 	private val factory = new org.apache.thrift.protocol.TBinaryProtocol.Factory()
 	private val thrift: Service[ThriftClientRequest, Array[Byte]] = ClientBuilder()
-		.codec(ThriftClientFramedCodec())
-		.hosts(new java.net.InetSocketAddress(host, port))
+		.hosts(host+":"+port)
 		.hostConnectionLimit(1)
+		.codec(ThriftClientFramedCodec())
 		.build()
 
 	override def release() {

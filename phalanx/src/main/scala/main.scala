@@ -159,8 +159,8 @@ object Main extends App {
 	System.setProperty("org.slf4j.simpleLogger.log.com.wikia.phalanx.MainService", "info")
 	val logger = LoggerFactory.getLogger("Main")
 	logger.info("Creating scribe client")
-	//val scribe = new Scribe("dev-szumo", 1463).category("log_phalanx")
-	val scribe = new ScribeBuffer()
+	val scribe = new Scribe("localhost", 1463).category("log_phalanx")
+	//val scribe = new ScribeBuffer()
 	scribe(Map.empty)() // make sure we're connected
 	val db = new DB(DB.DB_MASTER, "", "wikicities").connect()
 	logger.info("Loading rules from database")
