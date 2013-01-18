@@ -14,6 +14,9 @@ import util.parsing.json.{JSONArray, JSONFormat}
 import org.jboss.netty.handler.codec.http.HttpResponseStatus
 import org.jboss.netty.util.HashedWheelTimer
 import org.slf4j.{LoggerFactory, Logger}
+import java.io.{FileInputStream, File}
+import sys.SystemProperties
+import scala.collection.JavaConversions._
 
 class ExceptionLogger[Req,Rep](val logger: Logger) extends SimpleFilter[Req, Rep] {
 	def this(loggerName: String) = this(LoggerFactory.getLogger(loggerName))
@@ -154,24 +157,36 @@ class MainService(var rules: Map[String, RuleSystem], val reloader: (Map[String,
 }
 
 object Main extends App {
-	// todo: make logging configurable instead?
-	System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "warn")
-	System.setProperty("org.slf4j.simpleLogger.log.Main", "info")
-	System.setProperty("org.slf4j.simpleLogger.log.com.wikia.phalanx.MainService", "info")
+	def loadProperties(fileName: String): Option[java.util.Properties] = {
+		val file = new File(fileName)
+		if (file.exists() && file.canRead) {
+			val properties = new java.util.Properties()
+			properties.load(new FileInputStream(file))
+			Some(properties)
+		} else None
+	}
+	// load config from first file that exists: phalanx.properties, phalanx.default.properties
+	val loadedProperties = Stream("phalanx.properties", "phalanx.default.properties").map(loadProperties).flatten.head.toMap
+	sys.props ++= loadedProperties
+
 	val logger = LoggerFactory.getLogger("Main")
-	logger.info("Creating scribe client")
-	val scribe = new ScribeClient("localhost", 1463)
-	//val scribe = new ScribeBuffer()
+	logger.info("Properties loaded")
+	val scribe = {
+		val scribetype =sys.props("com.wikia.phalanx.Scribe")
+		logger.info("Creating scribe client ("+scribetype+")")
+		scribetype match {
+			case "send" => new ScribeClient("localhost", 1463)
+			case "buffer" => new ScribeBuffer()
+			case "discard" => new ScribeDiscard()
+		}
+	}
 	scribe(("test", Map(("somekey", "somevalue"))))() // make sure we're connected
-	val db = new DB(DB.DB_MASTER, "", "wikicities").connect()
+	val port = sys.props("com.wikia.phalanx.port").toInt
+
 	logger.info("Loading rules from database")
+	val db = new DB(DB.DB_MASTER, "", "wikicities").connect()
 	val mainService = new MainService(RuleSystem.fromDatabase(db), (old, changed) => RuleSystem.reloadSome(db, old, changed.toSet),
 		new ExceptionLogger(logger) andThen scribe.category("log_phalanx"))
-	// todo: reload only changed rules
-	val port = Option(System getenv "PORT") match {
-		case Some(p) => p.toInt
-		case None => 8080
-	}
 
 	val config = ServerBuilder()
 		.codec(RichHttp[Request](Http()))

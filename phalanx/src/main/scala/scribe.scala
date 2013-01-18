@@ -37,3 +37,8 @@ class ScribeBuffer extends ScribeLike {
 		Future.join(result)
 	}
 }
+
+class ScribeDiscard extends ScribeLike {
+	// does nothing with requests
+	def apply(request: (String, Any)): Future[Unit] = Future.Done
+}
