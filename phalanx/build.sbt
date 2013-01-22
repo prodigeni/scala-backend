@@ -6,7 +6,7 @@ name := "phalanx"
 
 organization := "com.wikia"
 
-version := "0.2"
+version := "0.3"
 
 scalaVersion := "2.9.2"
 
@@ -33,18 +33,20 @@ publishTo <<= (version) { version: String =>
 }
 
 libraryDependencies ++= Seq(
-  "com.wikia" %% "wikifactory" % "0.4",
+  "com.wikia" %% "wikifactory" % "0.5",
   "com.twitter" % "finagle-core" % "5.3.1",
   "com.twitter" % "finagle-http" % "5.3.1",
   "org.scalatest" %% "scalatest" % "1.8" % "test",
   "net.sf.opencsv" % "opencsv" % "2.0" % "test",
-  "org.slf4j" % "slf4j-simple" % "1.7.2" % "compile",
-  "com.ning" % "metrics.eventtracker-scribe" % "4.1.2"
+  "org.slf4j" % "slf4j-simple" % "1.7.2" % "compile"
 )
 
 
-artifact in (Compile, assembly) ~= { art =>
-  art.copy(`classifier` = Some("assembly"))
+artifact in (Compile, assembly) ~= { art => {
+  println(art)
+  art.copy(`classifier` = Some("assembly")) 
+  }
 }
 
 addArtifact(artifact in (Compile, assembly), assembly)
+

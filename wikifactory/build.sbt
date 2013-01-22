@@ -2,7 +2,7 @@ name := "wikifactory"
 
 organization := "com.wikia"
 
-version := "0.4"
+version := "0.5"
 
 scalaVersion := "2.9.2"
 
@@ -20,6 +20,8 @@ publishTo <<= (version) { version: String =>
 	Some( Resolver.ssh( repoInfo._1, "pkg-s1.wikia-prod", repoInfo._2 ) as ( user, keyFile ) withPermissions( "0644" ) )
 }
 
+publishArtifact in (Compile, packageDoc) := false
+
 resolvers ++= Seq( 
 	"Sonatype Maven repository" at "https://oss.sonatype.org/content/repositories/snapshots/org/jooq/",
 	"Wikia Maven repository" at "http://pkg-s1.wikia-prod/maven/releases/"
@@ -30,7 +32,5 @@ libraryDependencies ++= Seq(
   "org.yaml" % "snakeyaml" % "1.11", 
   "org.scalatest" %% "scalatest" % "1.8" % "test",
   "mysql" % "mysql-connector-java" % "5.1.22",
-  "org.apache.thrift" % "libthrift" % "0.9.0",
-  "org.apache.thrift" % "libfb303" % "0.9.0",
-  "com.ning" % "metrics.eventtracker-scribe" % "4.1.2"
+  "org.apache.thrift" % "libthrift" % "0.9.0"
 )

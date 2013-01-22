@@ -51,22 +51,22 @@ class MainService(var rules: Map[String, RuleSystem], val reloader: (Map[String,
 	watchExpired()
 
 	override def release() {
-		logger.info("Stopping expired timer")
+		logger.trace("Stopping expired timer")
 		timer.stop()
-		logger.info("Stopping scribe client")
+		logger.trace("Stopping scribe client")
 		scribe.release()
 	}
 
 	def watchExpired() {
 		val minDates = rules.values.flatMap(ruleSystem => ruleSystem.expiring.headOption.map(rule => rule.expires.get))
 		expireWatchTask.map(task => {
-			logger.info("Old expire task " + task + "cancelled")
+			logger.trace("Old expire task " + task + "cancelled")
 			task.cancel()
 		})
 		if (minDates.isEmpty) {
 			nextExpireDate = None
 			expireWatchTask = None
-			logger.info("Expire task not required")
+			logger.trace("Expire task not required")
 		} else {
 			val c = java.util.Calendar.getInstance(DB.dbTimeZone)
 			c.setTime(minDates.min)
@@ -76,7 +76,7 @@ class MainService(var rules: Map[String, RuleSystem], val reloader: (Map[String,
 			expireWatchTask = Some(timer.schedule(Time(nextExpireDate.get)) {
 				expire()
 			})
-			logger.info("Scheduling expire task at " + nextExpireDate.get)
+			logger.trace("Scheduling expire task at " + nextExpireDate.get)
 		}
 	}
 	def expire() {
@@ -169,7 +169,7 @@ object Main extends App {
 	sys.props ++= loadedProperties
 
 	val logger = LoggerFactory.getLogger("Main")
-	logger.info("Properties loaded")
+	logger.trace("Properties loaded")
 	val scribe = {
 		val scribetype =sys.props("com.wikia.phalanx.Scribe")
 		logger.info("Creating scribe client ("+scribetype+")")
