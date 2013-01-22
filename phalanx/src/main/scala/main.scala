@@ -15,7 +15,6 @@ import org.jboss.netty.handler.codec.http.HttpResponseStatus
 import org.jboss.netty.util.HashedWheelTimer
 import org.slf4j.{LoggerFactory, Logger}
 import java.io.{FileInputStream, File}
-import sys.SystemProperties
 import scala.collection.JavaConversions._
 
 class ExceptionLogger[Req,Rep](val logger: Logger) extends SimpleFilter[Req, Rep] {
