@@ -50,7 +50,8 @@ class DataTests extends FlatSpec {
 
 object DataTests {
 	val curdir = System.getProperty("user.dir")
-	lazy val csv = new CSVFile(curdir + "/src/test/resources/data1.csv").toStream.drop(1)
+	val dir = if (curdir.endsWith("phalanx")) curdir else curdir + "/phalanx" // for tests to work when run from parent directory
+	lazy val csv = new CSVFile(dir + "/src/test/resources/data1.csv").toStream.drop(1)
 	// skip header p_id,p_type,p_exact,p_regex,p_case,"cast(p_text as CHAR(255))"
 	lazy val rules = csv.map(arr => {
 		val Array(p_id: String, p_type: String, p_exact: String, p_regex: String, p_case: String, p_text: String) = arr
