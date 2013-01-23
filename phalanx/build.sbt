@@ -43,8 +43,7 @@ libraryDependencies ++= Seq(
 
 
 artifact in (Compile, assembly) ~= { art => {
-  println(art)
-  art.copy(`classifier` = Some("assembly")) 
+  art.copy(`classifier` = Some("assembly"))
   }
 }
 

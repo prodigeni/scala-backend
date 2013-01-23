@@ -1,21 +1,21 @@
 package com.wikia.phalanx
 
-import com.twitter.finagle.{SimpleFilter, Service}
 import com.twitter.finagle.builder.ServerBuilder
 import com.twitter.finagle.http.filter.ExceptionFilter
 import com.twitter.finagle.http.path._
 import com.twitter.finagle.http.{Http, RichHttp, Request, Status, Version, Response, Message}
 import com.twitter.finagle.util.TimerFromNettyTimer
+import com.twitter.finagle.{SimpleFilter, Service}
 import com.twitter.util.{Time, TimerTask, FuturePool, Future}
 import com.wikia.wikifactory._
+import java.io.{FileInputStream, File}
 import java.util.regex.PatternSyntaxException
 import java.util.{Calendar, Date}
-import util.parsing.json.{JSONArray, JSONFormat}
 import org.jboss.netty.handler.codec.http.HttpResponseStatus
 import org.jboss.netty.util.HashedWheelTimer
 import org.slf4j.{LoggerFactory, Logger}
-import java.io.{FileInputStream, File}
 import scala.collection.JavaConversions._
+import util.parsing.json.{JSONArray, JSONFormat}
 
 class ExceptionLogger[Req,Rep](val logger: Logger) extends SimpleFilter[Req, Rep] {
 	def this(loggerName: String) = this(LoggerFactory.getLogger(loggerName))
@@ -42,7 +42,6 @@ object Respond {
 
 class MainService(var rules: Map[String, RuleSystem], val reloader: (Map[String, RuleSystem], Traversable[Int]) => Map[String, RuleSystem],
                   val scribe:Service[Map[String, Any], Unit]) extends Service[Request, Response] {
-	//def this(rules: Map[String, RuleSystem]) = this(rules, (x, y) => x)
 	val logger = LoggerFactory.getLogger(classOf[MainService])
 	val threaded = FuturePool.defaultPool
 	var nextExpireDate: Option[Date] = None
@@ -99,22 +98,22 @@ class MainService(var rules: Map[String, RuleSystem], val reloader: (Map[String,
 			case None => None
 		}
 	}
-	def handleCheckOrMatch(func: (RuleSystem, Checkable) => Response)(request: Request): Future[Response] = selectRuleSystem(request) match {
+	def handleCheckOrMatch(func: (RuleSystem, Seq[Checkable]) => Response)(request: Request): Future[Response] = selectRuleSystem(request) match {
 		case None => Future(Respond.error("Unknown type parameter"))
 		case Some(ruleSystem: RuleSystem) => threaded {
-			request.params.get("content") match {
-				case None => Respond.error("content parameter is missing")
-				case Some(s: String) => ({
-					func(ruleSystem, Checkable(s, request.params.getOrElse("lang", "en")))
-				})
+			val params = request.getParams("content")
+			if (params.isEmpty) Respond.error("content parameter is missing") else {
+					val lang = request.params.getOrElse("lang", "en")
+					func(ruleSystem, params.map ( s => Checkable(s, lang ) ))
 			}
 		}
 	}
-	val handleCheck = handleCheckOrMatch((ruleSystem, c) => {
-		if (ruleSystem.isMatch(c)) Respond.failure() else Respond.ok()
+
+	val handleCheck = handleCheckOrMatch((ruleSystem, checkables) => {
+		if (checkables.exists(c =>ruleSystem.isMatch(c))) Respond.failure() else Respond.ok()
 	}) _
-	val handleMatch = handleCheckOrMatch((ruleSystem, c) => {
-		val matches = ruleSystem.allMatches(c).map(r => r.dbId)
+	val handleMatch = handleCheckOrMatch((ruleSystem, checkables) => {
+		val matches = checkables.flatMap(c => ruleSystem.allMatches(c).map(r => r.dbId)).toSet.toSeq.sorted
 		Respond.json(matches)
 	}) _
 	def validateRegex(request: Request) = {

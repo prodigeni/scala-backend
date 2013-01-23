@@ -55,6 +55,13 @@ class ServiceTests extends FlatSpec {
 		assert(content === "failure\n")
 	}
 
+	it should "support multiple content parameters" in {
+		val request = RequestBuilder().url(address + "check?type=tests&content=ok&content=fuck&content=something").buildGet()
+		val response = client(request)()
+		val content = response.getContent.toString(charset)
+		assert(content === "failure\n")
+	}
+
 	it should "provide stats" in {
 		val request = RequestBuilder().url(address + "status").buildGet()
 		val response = client(request)()
