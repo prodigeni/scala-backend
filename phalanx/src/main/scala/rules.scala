@@ -199,7 +199,7 @@ class CombinedRuleSystem(initialRules: Traversable[DatabaseRule]) extends FlatRu
 			}
 		}
 		types.map(pair => {
-			val (text: String, checkers: Traversable[Checker]) = pair
+			val (text, checkers) = pair
 			text + statsPerCheckerType(checkers)
 		}).toSeq.sorted
 	}

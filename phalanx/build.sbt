@@ -16,6 +16,8 @@ resolvers += "scala-tools-releases" at "https://repository.jboss.org/nexus/conte
 
 resolvers += "scala-tools.org" at "http://scala-tools.org/repo-releases"
 
+resolvers += "newrelice agent API" at "http://download.newrelic.com"
+
 resolvers += "Wikia Maven repository" at "http://pkg-s1.wikia-prod/maven/releases/"
 
 publishMavenStyle := true
@@ -38,14 +40,15 @@ libraryDependencies ++= Seq(
   "com.twitter" % "finagle-http" % "5.3.1",
   "org.scalatest" %% "scalatest" % "1.8" % "test",
   "net.sf.opencsv" % "opencsv" % "2.0" % "test",
-  "org.slf4j" % "slf4j-simple" % "1.7.2" % "compile"
+  "org.slf4j" % "slf4j-simple" % "1.7.2",
+  "newrelic.java-agent" % "newrelic-api" % "2.7.0"
 )
 
+scalacOptions ++= Seq("-deprecation", "-unchecked")
 
-artifact in (Compile, assembly) ~= { art => {
-  art.copy(`classifier` = Some("assembly"))
-  }
-}
+artifact in (Compile, assembly) ~= { art => art.copy(`classifier` = Some("server")) }
+
+jarName in assembly := "phalanx-server.jar"
 
 addArtifact(artifact in (Compile, assembly), assembly)
 

@@ -16,6 +16,7 @@ import org.jboss.netty.util.HashedWheelTimer
 import org.slf4j.{LoggerFactory, Logger}
 import scala.collection.JavaConversions._
 import util.parsing.json.{JSONArray, JSONFormat}
+import com.newrelic.api.agent.{NewRelic, Trace}
 
 class ExceptionLogger[Req,Rep](val logger: Logger) extends SimpleFilter[Req, Rep] {
 	def this(loggerName: String) = this(LoggerFactory.getLogger(loggerName))
@@ -98,25 +99,39 @@ class MainService(var rules: Map[String, RuleSystem], val reloader: (Map[String,
 			case None => None
 		}
 	}
+	@Trace
 	def handleCheckOrMatch(func: (RuleSystem, Seq[Checkable]) => Response)(request: Request): Future[Response] = selectRuleSystem(request) match {
 		case None => Future(Respond.error("Unknown type parameter"))
 		case Some(ruleSystem: RuleSystem) => threaded {
 			val params = request.getParams("content")
 			if (params.isEmpty) Respond.error("content parameter is missing") else {
-					val lang = request.params.getOrElse("lang", "en")
-					func(ruleSystem, params.map ( s => Checkable(s, lang ) ))
+				val lang = request.params.getOrElse("lang", "en")
+			  NewRelic.setTransactionName("phalanx", request.uri)
+				val result = func(ruleSystem, params.map ( s => Checkable(s, lang ) ))
+				result
 			}
 		}
 	}
 
 	val handleCheck = handleCheckOrMatch((ruleSystem, checkables) => {
-		if (checkables.exists(c =>ruleSystem.isMatch(c))) Respond.failure() else Respond.ok()
+		if (checkables.exists(c =>ruleSystem.isMatch(c))) {
+			Respond.failure()
+		} else {
+			Respond.ok()
+		}
 	}) _
 	val handleMatch = handleCheckOrMatch((ruleSystem, checkables) => {
 		val matches = checkables.flatMap(c => ruleSystem.allMatches(c).map(r => r.dbId)).toSet.toSeq.sorted
+		if (matches.isEmpty) {
+
+		} else {
+
+		}
 		Respond.json(matches)
 	}) _
+	@Trace
 	def validateRegex(request: Request) = {
+		NewRelic.setTransactionName("phalanx", request.uri)
 		val s = request.params.getOrElse("regex", "")
 		try {
 			s.r
@@ -154,32 +169,69 @@ class MainService(var rules: Map[String, RuleSystem], val reloader: (Map[String,
 	}
 }
 
-object Main extends App {
-	def loadProperties(fileName: String): Option[java.util.Properties] = {
-		val file = new File(fileName)
-		if (file.exists() && file.canRead) {
-			val properties = new java.util.Properties()
-			properties.load(new FileInputStream(file))
-			Some(properties)
-		} else None
+class Jsvc {
+	/*
+	void init(String[] arguments): Here open configuration files, create a trace file, create ServerSockets, Threads
+	void start(): Start the Thread, accept incoming connections
+	void stop(): Inform the Thread to terminate the run(), close the ServerSockets
+	void destroy(): Destroy any object created in init()
+  */
+	def init(arguments: Array[String]) {
+
 	}
-	// load config from first file that exists: phalanx.properties, phalanx.default.properties
-	val loadedProperties = Stream("phalanx.properties", "phalanx.default.properties").map(loadProperties).flatten.head.toMap
-	sys.props ++= loadedProperties
+	def start() {
+
+	}
+	def stop() {
+
+	}
+	def destroy() {
+
+	}
+}
+
+object Main extends App {
+	def loadProperties(fileName: String): java.util.Properties = {
+		val file = new File(fileName)
+		val properties = new java.util.Properties()
+		properties.load(new FileInputStream(file))
+		println("Loaded properties from "+fileName)
+		properties
+	}
+
+	val cfName:Option[String] = sys.props.get("phalanx.config") orElse {
+		// load config from first config file that exists: phalanx.properties, /etc/phalanx.properties, phalanx.default.properties
+		Seq("./phalanx.properties", "/etc/phalanx.properties", "./phalanx.default.properties").find( fileName => {
+			val file = new File(fileName)
+			file.exists() && file.canRead
+		})
+	}
+	cfName match {
+		case Some(fileName) => sys.props ++= loadProperties(fileName).toMap
+		case None => {
+			println("Don't know where to load configuration from.")
+			System.exit(2)
+		}
+	}
+	def wikiaProp(key:String) = sys.props("com.wikia.phalanx."+key)
 
 	val logger = LoggerFactory.getLogger("Main")
 	logger.trace("Properties loaded")
 	val scribe = {
-		val scribetype =sys.props("com.wikia.phalanx.Scribe")
+		val scribetype = wikiaProp("scribe")
 		logger.info("Creating scribe client ("+scribetype+")")
 		scribetype match {
-			case "send" => new ScribeClient("localhost", 1463)
+			case "send" => {
+				val host = wikiaProp("scribe.host")
+				val port = wikiaProp("scribe.port").toInt
+				new ScribeClient(host, port)
+			}
 			case "buffer" => new ScribeBuffer()
 			case "discard" => new ScribeDiscard()
 		}
 	}
 	scribe(("test", Map(("somekey", "somevalue"))))() // make sure we're connected
-	val port = sys.props("com.wikia.phalanx.port").toInt
+	val port = wikiaProp("port").toInt
 
 	logger.info("Loading rules from database")
 	val db = new DB(DB.DB_MASTER, "", "wikicities").connect()
