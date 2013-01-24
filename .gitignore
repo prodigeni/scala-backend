@@ -6,4 +6,4 @@ target
 .idea_modules
 .classpath
 phalanx.properties
-deploy/phalanx-server.jar
+phalanx/deploy/phalanx-server.jar
