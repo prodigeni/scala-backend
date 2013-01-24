@@ -50,5 +50,7 @@ artifact in (Compile, assembly) ~= { art => art.copy(`classifier` = Some("server
 
 jarName in assembly := "phalanx-server.jar"
 
+target in assembly := new java.io.File("deploy")
+
 addArtifact(artifact in (Compile, assembly), assembly)
 
