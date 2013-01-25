@@ -1,31 +1,76 @@
 package com.wikia.phalanx
 
+import com.twitter.concurrent.NamedPoolThreadFactory
 import com.twitter.finagle.builder.ServerBuilder
+import com.twitter.finagle.http.RichHttp
 import com.twitter.finagle.http.filter.ExceptionFilter
+import com.twitter.finagle.http.path./
 import com.twitter.finagle.http.path._
-import com.twitter.finagle.http.{Http, RichHttp, Request, Status, Version, Response, Message}
+import com.twitter.finagle.http.{Http, Request, Status, Version, Response, Message}
 import com.twitter.finagle.util.TimerFromNettyTimer
 import com.twitter.finagle.{SimpleFilter, Service}
-import com.twitter.util.{Time, TimerTask, FuturePool, Future}
+import com.twitter.util._
 import com.wikia.wikifactory._
 import java.io.{FileInputStream, File}
 import java.util.regex.PatternSyntaxException
 import java.util.{Calendar, Date}
 import org.jboss.netty.handler.codec.http.HttpResponseStatus
 import org.jboss.netty.util.HashedWheelTimer
-import org.slf4j.{LoggerFactory, Logger}
+import scala.Some
 import scala.collection.JavaConversions._
-import util.parsing.json.{JSONArray, JSONFormat}
-import com.newrelic.api.agent.{NewRelic, Trace}
+import util.parsing.json.JSONArray
+import util.parsing.json.JSONFormat
+import org.slf4j.LoggerFactory
 
-class ExceptionLogger[Req,Rep](val logger: Logger) extends SimpleFilter[Req, Rep] {
-	def this(loggerName: String) = this(LoggerFactory.getLogger(loggerName))
+class ExceptionLogger[Req, Rep](val logger: NiceLogger) extends SimpleFilter[Req, Rep] {
+	def this(loggerName: String) = this(NiceLogger(loggerName))
 	def apply(request: Req, service: Service[Req, Rep]): Future[Rep] = {
-		service(request).onFailure( (exception) => {
-			logger.error("Exception in service" , exception)
+		service(request).onFailure((exception) => {
+			logger.error("Exception in service", exception)
 		})
 	}
 }
+
+case class NiceLogger(name: String) {
+	val logger = LoggerFactory.getLogger(name)
+	def trace(messageBlock: => String) {
+		if (logger.isTraceEnabled) logger.trace(messageBlock)
+	}
+	def debug(messageBlock: => String) {
+		if (logger.isDebugEnabled) logger.debug(messageBlock)
+	}
+	def info(messageBlock: => String) {
+		if (logger.isInfoEnabled) logger.info(messageBlock)
+	}
+	def warn(messageBlock: => String) {
+		if (logger.isWarnEnabled) logger.warn(messageBlock)
+	}
+	def error(messageBlock: => String) {
+		if (logger.isErrorEnabled) logger.error(messageBlock)
+	}
+	def error(message: String, error: Throwable) {
+		if (logger.isErrorEnabled) logger.error(message, error)
+	}
+	def timeIt[T](name:String)(func: => T):T = {
+		if (logger.isTraceEnabled) {
+			val start = Time.now
+			val result = func
+			val duration = Time.now - start
+			logger.trace(name+" "+ duration.inMillis+"ms")
+			result
+		} else func
+	}
+	def timeIt[T](name:String, future: => Future[T]):Future[T] = {
+		if (logger.isTraceEnabled) {
+			val start = Time.now
+			future.onSuccess( _ => {
+				val duration = Time.now - start
+				logger.trace(name+" "+ duration.inMillis+"ms")
+			})
+		} else future
+	}
+}
+
 
 object Respond {
 	def apply(content: String, status: HttpResponseStatus = Status.Ok, contentType: String = "text/plain; charset=utf-8") = {
@@ -40,14 +85,19 @@ object Respond {
 	def failure(s: String = "") = Respond("failure\n" + s)
 }
 
-
 class MainService(var rules: Map[String, RuleSystem], val reloader: (Map[String, RuleSystem], Traversable[Int]) => Map[String, RuleSystem],
-                  val scribe:Service[Map[String, Any], Unit]) extends Service[Request, Response] {
-	val logger = LoggerFactory.getLogger(classOf[MainService])
-	val threaded = FuturePool.defaultPool
+                  val scribe: Service[Map[String, Any], Unit]) extends Service[Request, Response] {
+	val logger = NiceLogger("MainService")
 	var nextExpireDate: Option[Date] = None
 	var expireWatchTask: Option[TimerTask] = None
 	val timer = new TimerFromNettyTimer(new HashedWheelTimer())
+	/*
+	val futurePool = FuturePool(
+		java.util.concurrent.Executors.newFixedThreadPool(Runtime.getRuntime.availableProcessors(), new NamedPoolThreadFactory("MainService pool"))
+	)
+	*/
+	val futurePool = FuturePool.immediatePool   // we use netty I/O workers thread anyway...
+
 	watchExpired()
 
 	override def release() {
@@ -56,7 +106,6 @@ class MainService(var rules: Map[String, RuleSystem], val reloader: (Map[String,
 		logger.trace("Stopping scribe client")
 		scribe.release()
 	}
-
 	def watchExpired() {
 		val minDates = rules.values.flatMap(ruleSystem => ruleSystem.expiring.headOption.map(rule => rule.expires.get))
 		expireWatchTask.map(task => {
@@ -85,62 +134,76 @@ class MainService(var rules: Map[String, RuleSystem], val reloader: (Map[String,
 		val expired = rules.values.flatMap(ruleSystem => ruleSystem.expiring.takeWhile(rule => rule.expires.get.getTime <= now)).map(r => r.dbId)
 		afterReload(expired)
 	}
-	def afterReload(expired: Traversable[Int]): Future[Unit] = {
-		threaded({
-			reloader(rules, expired)
-		}) map (newRules => {
-			rules = newRules
-			watchExpired()
+	def afterReload(expired: Traversable[Int]) {
+		rules = reloader(rules, expired)
+		watchExpired()
+	}
+	def handleCheckOrMatch(request: Request, func: (RuleSystem, Seq[Checkable]) => Response): Response = {
+		logger.timeIt("handleCheckOrMatch") {
+			val checkType = logger.timeIt("request.params") { request.params.get("type") }
+			val ruleSystem = logger.timeIt("checkType") { checkType match {
+				case Some(s: String) => {
+					rules.get(s)
+				}
+				case None => None
+			} }
+			logger.timeIt("ruleSystem match") { ruleSystem match {
+				case None => Respond.error("Unknown type parameter")
+				case Some(ruleSystem: RuleSystem) => {
+					val params = request.getParams("content")
+					if (params.isEmpty) Respond.error("content parameter is missing")
+					else {
+						val lang = request.params.getOrElse("lang", "en")
+						func(ruleSystem, params.map(s => Checkable(s, lang)))
+					}
+				}
+			} }
+			}
+	}
+	def handleCheck(request: Request) = {
+		handleCheckOrMatch(request, (ruleSystem, checkables) => {
+			logger.timeIt("handleCheck") {
+			if (checkables.exists(c => ruleSystem.isMatch(c))) {
+				Respond.failure()
+			} else {
+				Respond.ok()
+			}
+			}
 		})
 	}
-	def selectRuleSystem(request: Request): Option[RuleSystem] = {
-		request.params.get("type") match {
-			case Some(s: String) => rules.get(s)
-			case None => None
-		}
-	}
-	@Trace
-	def handleCheckOrMatch(func: (RuleSystem, Seq[Checkable]) => Response)(request: Request): Future[Response] = selectRuleSystem(request) match {
-		case None => Future(Respond.error("Unknown type parameter"))
-		case Some(ruleSystem: RuleSystem) => threaded {
-			val params = request.getParams("content")
-			if (params.isEmpty) Respond.error("content parameter is missing") else {
-				val lang = request.params.getOrElse("lang", "en")
-			  NewRelic.setTransactionName("phalanx", request.uri)
-				val result = func(ruleSystem, params.map ( s => Checkable(s, lang ) ))
-				result
+	def handleMatch(request: Request) = {
+		handleCheckOrMatch(request, (ruleSystem, checkables) => {
+			logger.timeIt("handleMatch") {
+			val matches = checkables.flatMap(c => ruleSystem.allMatches(c).map(r => r.dbId)).toSet.toSeq.sorted
+			Respond.json(matches)
 			}
-		}
+		})
 	}
-
-	val handleCheck = handleCheckOrMatch((ruleSystem, checkables) => {
-		if (checkables.exists(c =>ruleSystem.isMatch(c))) {
-			Respond.failure()
-		} else {
-			Respond.ok()
-		}
-	}) _
-	val handleMatch = handleCheckOrMatch((ruleSystem, checkables) => {
-		val matches = checkables.flatMap(c => ruleSystem.allMatches(c).map(r => r.dbId)).toSet.toSeq.sorted
-		if (matches.isEmpty) {
-
-		} else {
-
-		}
-		Respond.json(matches)
-	}) _
-	@Trace
 	def validateRegex(request: Request) = {
-		NewRelic.setTransactionName("phalanx", request.uri)
 		val s = request.params.getOrElse("regex", "")
-		try {
+		val response = try {
 			s.r
 			Respond.ok()
 		} catch {
 			case e: PatternSyntaxException => Respond.failure()
 		}
+		response
 	}
-	def stats = {
+	def reload(request: Request) = {
+		val changed = request.getParam("changed", "").split(',').toSeq.filter {
+			_ != ""
+		}
+		val ids = if (changed.isEmpty) Seq.empty[Int]
+		else changed.map {
+			_.toInt
+		}
+		afterReload(ids)
+		Respond.ok()
+	}
+	def stats(request: Request): Response = {
+		Respond(statsString)
+	}
+	def statsString: String = {
 		val response = (rules.toSeq.map(t => {
 			val (s, ruleSystem) = t
 			s + ":\n" + (ruleSystem.stats.map {
@@ -152,18 +215,11 @@ class MainService(var rules: Map[String, RuleSystem], val reloader: (Map[String,
 	def apply(request: Request): Future[Response] = {
 		Path(request.path) match {
 			case Root => Future(Respond("PHALANX ALIVE"))
-			case Root / "check" => handleCheck(request)
-			case Root / "match" => handleMatch(request)
-			case Root / "validate" => threaded {
-				validateRegex(request)
-			}
-			case Root / "reload" => {
-				val ids = for (x <- request.getParam("changed", "").split(',')) yield x.toInt
-				afterReload(ids).map(_ => Respond.ok())
-			}
-			case Root / "stats" => threaded {
-				Respond(stats)
-			}
+			case Root / "check" => futurePool(handleCheck(request))
+			case Root / "match" => futurePool(handleMatch(request))
+			case Root / "validate" => futurePool(validateRegex(request))
+			case Root / "reload" => futurePool(reload(request))
+			case Root / "stats" => futurePool(stats(request))
 			case _ => Future(Respond.error("not found", Status.NotFound))
 		}
 	}
@@ -195,13 +251,13 @@ object Main extends App {
 		val file = new File(fileName)
 		val properties = new java.util.Properties()
 		properties.load(new FileInputStream(file))
-		println("Loaded properties from "+fileName)
+		println("Loaded properties from " + fileName)
 		properties
 	}
 
-	val cfName:Option[String] = sys.props.get("phalanx.config") orElse {
+	val cfName: Option[String] = sys.props.get("phalanx.config") orElse {
 		// load config from first config file that exists: phalanx.properties, /etc/phalanx.properties, phalanx.default.properties
-		Seq("./phalanx.properties", "/etc/phalanx.properties", "./phalanx.default.properties").find( fileName => {
+		Seq("./phalanx.properties", "/etc/phalanx.properties", "./phalanx.default.properties").find(fileName => {
 			val file = new File(fileName)
 			file.exists() && file.canRead
 		})
@@ -213,13 +269,13 @@ object Main extends App {
 			System.exit(2)
 		}
 	}
-	def wikiaProp(key:String) = sys.props("com.wikia.phalanx."+key)
+	def wikiaProp(key: String) = sys.props("com.wikia.phalanx." + key)
 
-	val logger = LoggerFactory.getLogger("Main")
+	val logger = NiceLogger("Main")
 	logger.trace("Properties loaded")
 	val scribe = {
 		val scribetype = wikiaProp("scribe")
-		logger.info("Creating scribe client ("+scribetype+")")
+		logger.info("Creating scribe client (" + scribetype + ")")
 		scribetype match {
 			case "send" => {
 				val host = wikiaProp("scribe.host")
@@ -230,7 +286,8 @@ object Main extends App {
 			case "discard" => new ScribeDiscard()
 		}
 	}
-	scribe(("test", Map(("somekey", "somevalue"))))() // make sure we're connected
+	scribe(("test", Map(("somekey", "somevalue"))))()
+	// make sure we're connected
 	val port = wikiaProp("port").toInt
 
 	logger.info("Loading rules from database")
@@ -241,10 +298,14 @@ object Main extends App {
 	val config = ServerBuilder()
 		.codec(RichHttp[Request](Http()))
 		.name("Phalanx")
+		.maxConcurrentRequests(20)
+		.sendBufferSize(1024)
+		.recvBufferSize(1024)
+		.backlog(100)
 		.bindTo(new java.net.InetSocketAddress(port))
 
-	val server = config.build(ExceptionFilter andThen mainService)
+	val server = config.build(ExceptionFilter andThen NewRelic andThen mainService)
 	logger.info("Server started on port: " + port)
-	logger.trace("Initial stats: \n" + mainService.stats)
+	logger.trace("Initial stats: \n" + mainService.statsString)
 }
 

@@ -1,12 +1,13 @@
 package com.wikia
 
 import collection.{mutable, immutable}
+import org.slf4j.{LoggerFactory, Logger}
+import com.twitter.util.Time
 
 package object phalanx {
   implicit def string2Checkable(s:String): Checkable = new Checkable(s)
 	implicit def iterable2Group[A, T <: Iterable[A]](obj: T):RichIterableGroup[A] = new RichIterableGroup(obj)
 }
-
 class RichIterableGroup[A](val obj: Iterable[A]) {
 	// adapted from TraversableLike.groupBy
 	def groupMap[K,R](f: A => (K,R)): Map[K, Iterable[R]] = {
@@ -27,3 +28,5 @@ class RichIterableGroup[A](val obj: Iterable[A]) {
 		counter.toMap
 	}
 }
+
+

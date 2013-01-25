@@ -1,4 +1,5 @@
 import AssemblyKeys._ // for sbt-assembly
+import java.nio.file.Files // for easy file copy (Java 7)
 
 assemblySettings
 
@@ -48,9 +49,13 @@ scalacOptions ++= Seq("-deprecation", "-unchecked")
 
 artifact in (Compile, assembly) ~= { art => art.copy(`classifier` = Some("server")) }
 
-jarName in assembly := "phalanx-server.jar"
-
-target in assembly := new java.io.File("deploy")
-
 addArtifact(artifact in (Compile, assembly), assembly)
 
+logLevel in Global := Level.Warn
+
+logLevel in test := Level.Info
+
+assembly ~= { { (f)  =>
+  Files.copy(f.toPath(), java.nio.file.Paths.get("deploy", "phalanx-server.jar"), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+	f }
+}

@@ -32,9 +32,8 @@ common: &default_settings
   # Set to true to enable component-based transaction naming.
   # Set to false to use the URI of a web request as the name of the transaction.
   # Default is true.
-  enable_auto_transaction_naming: true
-  
- 
+  enable_auto_transaction_naming: false
+   
   # Set the name of your application as you'd like it show up in New Relic.
   # if enable_auto_app_naming is false, the agent reports all data to this application.
   # Otherwise, the agent reports only background tasks (transactions for non-web applications) to this application.
@@ -49,7 +48,7 @@ common: &default_settings
   # This setting is dynamic, so changes do not require restarting your application.
   # The levels in increasing order of verboseness are: off, severe, warning, info, fine, finer, finest
   # Default is info.
-  log_level: info
+  log_level: warning
   
   # Log all data to and from New Relic in plain text.
   # This setting is dynamic, so changes do not require restarting your application.
@@ -98,7 +97,7 @@ common: &default_settings
   # whether or not to capture HTTP params.  When true, frameworks can
   # exclude HTTP parameters from being captured.
   # Default is false.
-  capture_params: false
+  capture_params: true
   
   # Tells transaction tracer and error collector to not to collect
   # specific http request parameters. 
@@ -129,7 +128,7 @@ common: &default_settings
     # SQL, "raw" which sends the SQL statement in its original form,
     # and "obfuscated", which strips out numeric and string literals.
     # Default is obfuscated.
-    record_sql: obfuscated
+    record_sql: raw
     
     # Obfuscate only occurrences of specific SQL fields names.
     # This setting only applies if "record_sql" is set to "raw".
@@ -201,10 +200,10 @@ common: &default_settings
     # By default the agent automatically inserts API calls in compiled JSPs to
     # inject the monitoring JavaScript into web pages.
     # Set this attribute to false to turn off this behavior.
-    auto_instrument: true
+    auto_instrument: false
     # Set this attribute to false to prevent injection of the monitoring JavaScript.
     # Default is true.
-    enabled: true
+    enabled: false
     
 # Application Environments
 # ------------------------------------------

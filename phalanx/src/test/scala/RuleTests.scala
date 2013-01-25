@@ -33,7 +33,7 @@ class RuleTests extends FlatSpec {
 		intercept[RuleViolation] {
 			rule.check(Checkable("Mary has a wolf"))
 		}
-		assert(rule.allMatches(Checkable("Mary has a lamb")) === Set(Rule.contains("Mary")))
+		assert(rule.allMatches(Checkable("Mary has a lamb")).toSet === Set(Rule.contains("Mary")))
 		intercept[RuleViolation] {
 			rule.check(Checkable("lamb"))
 		}
