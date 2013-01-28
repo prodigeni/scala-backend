@@ -4,7 +4,6 @@ import com.twitter.concurrent.NamedPoolThreadFactory
 import com.twitter.finagle.builder.ServerBuilder
 import com.twitter.finagle.http.RichHttp
 import com.twitter.finagle.http.filter.ExceptionFilter
-import com.twitter.finagle.http.path./
 import com.twitter.finagle.http.path._
 import com.twitter.finagle.http.{Http, Request, Status, Version, Response, Message}
 import com.twitter.finagle.util.TimerFromNettyTimer
@@ -20,7 +19,6 @@ import scala.Some
 import scala.collection.JavaConversions._
 import util.parsing.json.JSONArray
 import util.parsing.json.JSONFormat
-import org.slf4j.LoggerFactory
 
 class ExceptionLogger[Req, Rep](val logger: NiceLogger) extends SimpleFilter[Req, Rep] {
 	def this(loggerName: String) = this(NiceLogger(loggerName))
@@ -31,47 +29,6 @@ class ExceptionLogger[Req, Rep](val logger: NiceLogger) extends SimpleFilter[Req
 	}
 }
 
-case class NiceLogger(name: String) {
-	val logger = LoggerFactory.getLogger(name)
-	def trace(messageBlock: => String) {
-		if (logger.isTraceEnabled) logger.trace(messageBlock)
-	}
-	def debug(messageBlock: => String) {
-		if (logger.isDebugEnabled) logger.debug(messageBlock)
-	}
-	def info(messageBlock: => String) {
-		if (logger.isInfoEnabled) logger.info(messageBlock)
-	}
-	def warn(messageBlock: => String) {
-		if (logger.isWarnEnabled) logger.warn(messageBlock)
-	}
-	def error(messageBlock: => String) {
-		if (logger.isErrorEnabled) logger.error(messageBlock)
-	}
-	def error(message: String, error: Throwable) {
-		if (logger.isErrorEnabled) logger.error(message, error)
-	}
-	def timeIt[T](name:String)(func: => T):T = {
-		if (logger.isTraceEnabled) {
-			val start = Time.now
-			val result = func
-			val duration = Time.now - start
-			logger.trace(name+" "+ duration.inMillis+"ms")
-			result
-		} else func
-	}
-	def timeIt[T](name:String, future: => Future[T]):Future[T] = {
-		if (logger.isTraceEnabled) {
-			val start = Time.now
-			future.onSuccess( _ => {
-				val duration = Time.now - start
-				logger.trace(name+" "+ duration.inMillis+"ms")
-			})
-		} else future
-	}
-}
-
-
 object Respond {
 	def apply(content: String, status: HttpResponseStatus = Status.Ok, contentType: String = "text/plain; charset=utf-8") = {
 		val response = Response(Version.Http11, status)
@@ -79,7 +36,10 @@ object Respond {
 		response.contentString = content
 		response
 	}
-	def json(data: Traversable[Int]) = Respond(JSONArray(data.toList).toString(JSONFormat.defaultFormatter), Status.Ok, Message.ContentTypeJson)
+	def json(data: Iterable[DatabaseRuleInfo]) = {
+		val jsonData = JSONArray(data.toList.map(x => x.toJSONObject))
+		Respond(jsonData.toString(JSONFormat.defaultFormatter), Status.Ok, Message.ContentTypeJson)
+	}
 	def error(info: String, status: HttpResponseStatus = Status.InternalServerError) = Respond(info + "\n", status)
 	def ok(s: String = "") = Respond("ok\n" + s)
 	def failure(s: String = "") = Respond("failure\n" + s)
@@ -173,8 +133,9 @@ class MainService(var rules: Map[String, RuleSystem], val reloader: (Map[String,
 	}
 	def handleMatch(request: Request) = {
 		handleCheckOrMatch(request, (ruleSystem, checkables) => {
+			val limit = request.params.getIntOrElse("limit", 1)
 			logger.timeIt("handleMatch") {
-			val matches = checkables.flatMap(c => ruleSystem.allMatches(c).map(r => r.dbId)).toSet.toSeq.sorted
+			val matches = checkables.toStream.flatMap(c => ruleSystem.allMatches(c)).take(limit)
 			Respond.json(matches)
 			}
 		})

@@ -45,7 +45,8 @@ Examples:
 
 
 ### /match
-Paremeters are the same as for `/check`, but results will be a json list (potentially empty) of matching rule ids.
+Paremeters are the same as for `/check`, but results will be a json list (potentially empty) of matching rule info.
+Each rule info is a JSON dictionary with following keys: id, text, reason, caseSensitive, exact, regex, language, expires, authorId
 
 `> curl "http://localhost:8080/match?lang=en&type=content&content=hello"`
 
@@ -57,7 +58,7 @@ Paremeters are the same as for `/check`, but results will be a json list (potent
 
 `> curl "http://localhost:8080/match?lang=en&type=content&content=pornhub.com"`
 
-`[4009]`
+`[{"regex" : true, "expires" : "", "text" : "pornhub\\.com", "reason" : "SpamRegex initial import", "exact" : false, "caseSensitive" : false, "id" : 4009, "language" : "", "authorId" : 184532}]`
 
 
 ### /validate

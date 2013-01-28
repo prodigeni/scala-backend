@@ -7,6 +7,7 @@ import java.util.Date
 import java.util.regex.Pattern
 import org.jooq.tools.unsigned.Unsigned
 import scala.collection.JavaConversions._
+import util.parsing.json.JSONObject
 
 class RuleViolation(val rules: Iterable[DatabaseRuleInfo]) extends Exception {
 	def ruleIds = rules.map(rule => rule.dbId)
@@ -83,6 +84,23 @@ trait DatabaseRuleInfo {
 	val regex: Boolean
 	val language: Option[String]
 	val expires: Option[Date]
+	val authorId: Int
+	def toJSONObject:JSONObject = {
+		JSONObject(Map(
+			("id", dbId),
+			("text", text),
+			("reason", reason),
+		  ("caseSensitive", caseSensitive),
+		  ("exact", exact),
+		  ("regex", regex),
+		  ("language", language.getOrElse("")),
+		  ("authorId", authorId),
+		  ("expires", expires match {
+			  case None => ""
+				case Some(date) => com.wikia.wikifactory.DB.toWikiTime(date)
+		  })
+		))
+	}
 }
 
 trait Rule {
@@ -96,12 +114,13 @@ trait Rule {
 
 object Rule {
 	// simple test cases
-	def exact(text: String, cs: Boolean = true, lang: Option[String] = None, expires: Option[Date] = None) = new DatabaseRule(text, 0, "", cs, true, false, lang, expires)
-	def regex(text: String, cs: Boolean = true, lang: Option[String] = None, expires: Option[Date] = None) = new DatabaseRule(text, 0, "", cs, false, true, lang, expires)
-	def contains(text: String, cs: Boolean = true, lang: Option[String] = None, expires: Option[Date] = None) = new DatabaseRule(text, 0, "", cs, false, false, lang, expires)
+	def exact(text: String, cs: Boolean = true, lang: Option[String] = None, expires: Option[Date] = None) = new DatabaseRule(text, 0, "", cs, true, false, lang, expires, 0)
+	def regex(text: String, cs: Boolean = true, lang: Option[String] = None, expires: Option[Date] = None) = new DatabaseRule(text, 0, "", cs, false, true, lang, expires, 0)
+	def contains(text: String, cs: Boolean = true, lang: Option[String] = None, expires: Option[Date] = None) = new DatabaseRule(text, 0, "", cs, false, false, lang, expires, 0)
 }
 
-case class DatabaseRule(text: String, dbId: Int, reason: String, caseSensitive: Boolean, exact: Boolean, regex: Boolean, language: Option[String], expires: Option[Date]) extends DatabaseRuleInfo with Rule {
+case class DatabaseRule(text: String, dbId: Int, reason: String, caseSensitive: Boolean, exact: Boolean, regex: Boolean,
+                        language: Option[String], expires: Option[Date], authorId: Int) extends DatabaseRuleInfo with Rule {
 	val caseType = if (caseSensitive || DatabaseRuleInfo.letterPattern.findFirstIn(text).isEmpty) CaseSensitive else CaseInsensitive
 	val checker: Checker = {
 		if (regex) new RegexChecker(caseType, text)
@@ -123,11 +142,12 @@ trait RuleSystem extends Rule {
 
 class FlatRuleSystem(initialRules: Iterable[DatabaseRule]) extends RuleSystem {
 	val rules = initialRules.toSet
+	val ruleStream = rules.toStream
 	val expiring = rules.filter(r => r.expires.isDefined).toIndexedSeq.sortBy((r: DatabaseRuleInfo) => r.expires.get.getTime)
 	def isMatch(s: Checkable): Boolean = rules.exists {
 		_.isMatch(s)
 	}
-	def allMatches(s: Checkable) = rules.flatMap((x: DatabaseRule) => x.allMatches(s))
+	def allMatches(s: Checkable) = ruleStream.flatMap((x: DatabaseRule) => x.allMatches(s))
 	def combineRules: CombinedRuleSystem = new CombinedRuleSystem(initialRules)
 	def copy(rules: Iterable[DatabaseRule]): RuleSystem = new FlatRuleSystem(rules)
 	def reloadRules(added: Iterable[DatabaseRule], deletedIds: Set[Int]): RuleSystem = {
@@ -183,7 +203,7 @@ class CombinedRuleSystem(initialRules: Iterable[DatabaseRule]) extends FlatRuleS
 			result
 		}
 	}
-	override def allMatches(s: Checkable): Iterable[DatabaseRuleInfo] = if (isMatch(s)) rules flatMap (x => x.allMatches(s)) else Seq.empty[DatabaseRuleInfo]
+	override def allMatches(s: Checkable): Iterable[DatabaseRuleInfo] = if (isMatch(s)) ruleStream flatMap (x => x.allMatches(s)) else Seq.empty[DatabaseRuleInfo]
 	override def combineRules: CombinedRuleSystem = this
 	override def ruleStats: Iterable[String] = {
 		val types = new mutable.HashMap[String, Set[Checker]]().withDefaultValue(Set.empty[Checker])
@@ -225,7 +245,8 @@ object RuleSystem {
 		val date = row.getPExpire
 
 		new DatabaseRule(new String(row.getPText, "utf-8"), row.getPId.intValue(), new String(row.getPReason, "utf-8"),
-			row.getPCase == 1, row.getPExact == 1, row.getPRegex == 1, if (lang == null || lang.isEmpty) None else Some(lang), com.wikia.wikifactory.DB.fromWikiTime(date))
+			row.getPCase == 1, row.getPExact == 1, row.getPRegex == 1, if (lang == null || lang.isEmpty) None else Some(lang), com.wikia.wikifactory.DB.fromWikiTime(date),
+		row.getPAuthorId)
 	}
 	private def ruleBuckets = (for (v <- contentTypes.values) yield (v, collection.mutable.Set.empty[DatabaseRule])).toMap
 	private def dbRows(db: org.jooq.FactoryOperations, condition: Option[org.jooq.Condition]): Seq[PhalanxRecord] = {

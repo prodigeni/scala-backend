@@ -7,3 +7,4 @@ target
 .classpath
 phalanx.properties
 phalanx/deploy/phalanx-server.jar
+phalanx/deploy/logs
