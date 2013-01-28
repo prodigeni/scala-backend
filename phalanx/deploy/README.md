@@ -17,11 +17,11 @@
 * runit/run
 
 ### in /etc/sv/phalanx/log
-# runit/log/run
+* runit/log/run
 
 ### in /usr/conf/wikia/current
-DB.yml - standard wikifactory configuration used by Wikia
-phalanx.default.properties - copied from phalanx.default.properties
-phalanx.properties - if you wish override default configuration
+* DB.yml - standard wikifactory configuration used by Wikia
+* phalanx.default.properties - copied from phalanx.default.properties
+* phalanx.properties - if you wish override default configuration
 
 
