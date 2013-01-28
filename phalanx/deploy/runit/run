@@ -1,0 +1,5 @@
+#!/bin/sh
+PHALANX_DIR=/usr/local/lib/phalanx
+sv start scribe || exit 1
+exec 2>&1
+exec java -javaagent:$PHALANX_DIR/newrelic.jar -Dnewrelic.environment=${ENVNAME-phalanx-production} -jar $PHALANX_DIR/phalanx-server.jar

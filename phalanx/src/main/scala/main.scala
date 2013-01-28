@@ -215,7 +215,8 @@ object Main extends App {
 
 	val cfName: Option[String] = sys.props.get("phalanx.config") orElse {
 		// load config from first config file that exists: phalanx.properties, /etc/phalanx.properties, phalanx.default.properties
-		Seq("./phalanx.properties", "/etc/phalanx.properties", "./phalanx.default.properties").find(fileName => {
+		Seq("./phalanx.properties", "/usr/wikia/conf/current/phalanx.properties", "./phalanx.default.properties",
+			"/usr/wikia/conf/current/phalanx.default.properties").find(fileName => {
 			val file = new File(fileName)
 			file.exists() && file.canRead
 		})
