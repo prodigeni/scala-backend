@@ -7,7 +7,7 @@
 
 ## Phalanx in production requires that following files should be installed:
 
-### in /usr/local/lib/phalanx:
+### in /usr/wikia/phalanx/lib:
 * newrelic.jar
 * newrelic.yml
 * phalanx-server.jar
@@ -22,6 +22,6 @@
 ### in /usr/conf/wikia/current
 * DB.yml - standard wikifactory configuration used by Wikia
 * phalanx.default.properties - copied from phalanx.default.properties
-* phalanx.properties - if you wish override default configuration
+* phalanx.properties - if you wish replace default configuration
 
 
