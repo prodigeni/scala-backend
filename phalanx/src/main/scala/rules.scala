@@ -197,11 +197,9 @@ class CombinedRuleSystem(initialRules: Iterable[DatabaseRule]) extends FlatRuleS
 	}
 	override def copy(rules: Iterable[DatabaseRule]) = new CombinedRuleSystem(rules)
 	override def isMatch(s: Checkable): Boolean = {
-		logger.timeIt("isMatch") {
-			val selected = checkers(None) ++ checkers(Some(s.language))
-			val result = selected.exists (x => x.isMatch(s))
-			result
-		}
+		val selected = checkers(None) ++ checkers(Some(s.language))
+		val result = selected.exists (x => x.isMatch(s))
+		result
 	}
 	override def allMatches(s: Checkable): Iterable[DatabaseRuleInfo] = if (isMatch(s)) ruleStream flatMap (x => x.allMatches(s)) else Seq.empty[DatabaseRuleInfo]
 	override def combineRules: CombinedRuleSystem = this
@@ -278,9 +276,9 @@ object RuleSystem {
 		}
 		(result, ids)
 	}
-	def fromDatabase(db: org.jooq.FactoryOperations): Map[String, FlatRuleSystem] = {
+	def fromDatabase(db: org.jooq.FactoryOperations): Map[String, RuleSystem] = {
 		val (result, _) = createRules(dbRows(db, None))
-		result.mapValues(rules => new CombinedRuleSystem(rules))
+		result.transform( (_, rules) => new CombinedRuleSystem(rules))
 	}
 	def reloadSome(db: org.jooq.FactoryOperations, oldMap: Map[String, RuleSystem], changedIds: Set[Int]): Map[String, RuleSystem] = {
 		if (changedIds.isEmpty) {
@@ -291,10 +289,7 @@ object RuleSystem {
 				Unsigned.uint(_)
 			}))))
 			val deletedIds = changedIds.diff(foundIds)
-			oldMap.map(pair => {
-				val (key, rs) = pair
-				(key, rs.reloadRules(result(key), deletedIds))
-			})
+			oldMap.transform( (key, rs) => rs.reloadRules(result(key), deletedIds))
 		}
 	}
 

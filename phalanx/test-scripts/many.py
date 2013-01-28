@@ -7,8 +7,8 @@ from twisted.internet import reactor
 from twisted.internet.defer import DeferredList
 from twisted.python import log
 
-numberOfRequests = 100
-concurrentRequests = 10
+numberOfRequests = 5000
+concurrentRequests = 100
 baseUrl = "http://localhost:8080"
 
 def oneBatch(prev, ipList):
@@ -18,6 +18,7 @@ def oneBatch(prev, ipList):
 		@d.addCallback
 		def c(results):
 			sys.stdout.write(".")
+			sys.stdout.flush()
 			return prev + len([x for x in results if x[1] in ("[]", "ok\n")])
 		d.addErrback(log.err)
 		d.addBoth(oneBatch, left)

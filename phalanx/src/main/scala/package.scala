@@ -1,8 +1,6 @@
 package com.wikia
 
-import collection.{mutable, immutable}
-import org.slf4j.{LoggerFactory, Logger}
-import com.twitter.util.Time
+import collection.mutable
 
 package object phalanx {
   implicit def string2Checkable(s:String): Checkable = new Checkable(s)

@@ -19,6 +19,7 @@ import scala.Some
 import scala.collection.JavaConversions._
 import util.parsing.json.JSONArray
 import util.parsing.json.JSONFormat
+import java.util.concurrent.TimeUnit
 
 class ExceptionLogger[Req, Rep](val logger: NiceLogger) extends SimpleFilter[Req, Rep] {
 	def this(loggerName: String) = this(NiceLogger(loggerName))
@@ -45,18 +46,21 @@ object Respond {
 	def failure(s: String = "") = Respond("failure\n" + s)
 }
 
-class MainService(var rules: Map[String, RuleSystem], val reloader: (Map[String, RuleSystem], Traversable[Int]) => Map[String, RuleSystem],
+class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => Map[String, RuleSystem],
                   val scribe: Service[Map[String, Any], Unit]) extends Service[Request, Response] {
+	def this(initialRules: Map[String, RuleSystem], scribe: Service[Map[String, Any], Unit]) = this( (_, _) => initialRules, scribe)
 	val logger = NiceLogger("MainService")
 	var nextExpireDate: Option[Date] = None
 	var expireWatchTask: Option[TimerTask] = None
-	val timer = new TimerFromNettyTimer(new HashedWheelTimer())
-	/*
-	val futurePool = FuturePool(
-		java.util.concurrent.Executors.newFixedThreadPool(Runtime.getRuntime.availableProcessors(), new NamedPoolThreadFactory("MainService pool"))
+	val timer = new TimerFromNettyTimer(new HashedWheelTimer(1, TimeUnit.SECONDS))
+	var rules = reloader(Map.empty, Seq.empty)
+
+	val threadPoolSize = Runtime.getRuntime.availableProcessors()
+	//val threadPoolSize = 0
+
+	val futurePool  = if (threadPoolSize == 0) FuturePool.immediatePool else FuturePool(
+		java.util.concurrent.Executors.newFixedThreadPool(threadPoolSize, new NamedPoolThreadFactory("MainService pool"))
 	)
-	*/
-	val futurePool = FuturePool.immediatePool   // we use netty I/O workers thread anyway...
 
 	watchExpired()
 
@@ -95,49 +99,42 @@ class MainService(var rules: Map[String, RuleSystem], val reloader: (Map[String,
 		afterReload(expired)
 	}
 	def afterReload(expired: Traversable[Int]) {
-		rules = reloader(rules, expired)
+		rules = reloader(rules, expired).toMap
 		watchExpired()
 	}
-	def handleCheckOrMatch(request: Request, func: (RuleSystem, Seq[Checkable]) => Response): Response = {
-		logger.timeIt("handleCheckOrMatch") {
-			val checkType = logger.timeIt("request.params") { request.params.get("type") }
-			val ruleSystem = logger.timeIt("checkType") { checkType match {
-				case Some(s: String) => {
-					rules.get(s)
+	def handleCheckOrMatch(request: Request, func: (RuleSystem, Iterable[Checkable]) => Response): Response = {
+		val params =  request.params
+		val checkType = params.get("type")
+		val ruleSystem = checkType match {
+			case Some(s: String) =>  rules.get(s)
+			case None => None
+		}
+		ruleSystem match {
+			case None => Respond.error("Unknown type parameter")
+			case Some(ruleSystem: RuleSystem) => {
+				val content = params.getAll("content")
+				if (content.isEmpty) Respond.error("content parameter is missing")
+				else {
+					val lang = params.getOrElse("lang", "en")
+					func(ruleSystem, content.map(s => Checkable(s, lang)))
 				}
-				case None => None
-			} }
-			logger.timeIt("ruleSystem match") { ruleSystem match {
-				case None => Respond.error("Unknown type parameter")
-				case Some(ruleSystem: RuleSystem) => {
-					val params = request.getParams("content")
-					if (params.isEmpty) Respond.error("content parameter is missing")
-					else {
-						val lang = request.params.getOrElse("lang", "en")
-						func(ruleSystem, params.map(s => Checkable(s, lang)))
-					}
-				}
-			} }
 			}
+		}
 	}
 	def handleCheck(request: Request) = {
 		handleCheckOrMatch(request, (ruleSystem, checkables) => {
-			logger.timeIt("handleCheck") {
 			if (checkables.exists(c => ruleSystem.isMatch(c))) {
 				Respond.failure()
 			} else {
 				Respond.ok()
-			}
 			}
 		})
 	}
 	def handleMatch(request: Request) = {
 		handleCheckOrMatch(request, (ruleSystem, checkables) => {
 			val limit = request.params.getIntOrElse("limit", 1)
-			logger.timeIt("handleMatch") {
 			val matches = checkables.toStream.flatMap(c => ruleSystem.allMatches(c)).take(limit)
 			Respond.json(matches)
-			}
 		})
 	}
 	def validateRegex(request: Request) = {
@@ -253,15 +250,15 @@ object Main extends App {
 
 	logger.info("Loading rules from database")
 	val db = new DB(DB.DB_MASTER, "", "wikicities").connect()
-	val mainService = new MainService(RuleSystem.fromDatabase(db), (old, changed) => RuleSystem.reloadSome(db, old, changed.toSet),
+	val mainService = new MainService((old, changed) => RuleSystem.reloadSome(db, old, changed.toSet),
 		new ExceptionLogger(logger) andThen scribe.category("log_phalanx"))
 
 	val config = ServerBuilder()
 		.codec(RichHttp[Request](Http()))
 		.name("Phalanx")
-		.maxConcurrentRequests(20)
-		.sendBufferSize(1024)
-		.recvBufferSize(1024)
+		.maxConcurrentRequests(Seq(20, mainService.threadPoolSize).max)
+		.sendBufferSize(16*1024)
+		.recvBufferSize(16*1024)
 		.backlog(100)
 		.bindTo(new java.net.InetSocketAddress(port))
 

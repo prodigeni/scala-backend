@@ -14,7 +14,7 @@ class ServiceTests extends FlatSpec {
 
 	val rules = DataTests.rules
 	val scribe = new ScribeBuffer().category("tests")
-	val service = new MainService(Map(("tests", new FlatRuleSystem(rules).combineRules)), (x,y) => x, scribe)
+	val service = new MainService(Map(("tests", new FlatRuleSystem(rules).combineRules)), scribe)
 	val config = ServerBuilder()
 		.codec(RichHttp[Request](Http()))
 		.name("Phalanx")
@@ -76,7 +76,7 @@ class ServiceTests extends FlatSpec {
 		assert(content != "failure\n")
 	}
 
-	"Server" should "shutdown" in {
+	it should "shutdown on demand" in {
 		server.close()
 	}
 }
