@@ -1,3 +1,3 @@
 #!/bin/sh
-exec svlogs -tt ./main
+exec svlogd ./main
 
