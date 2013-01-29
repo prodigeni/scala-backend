@@ -1,4 +1,0 @@
-#!/bin/sh
-ENVNAME=`basename $0`
-java -javaagent:newrelic.jar -Dnewrelic.environment=$ENVNAME -jar phalanx-server.jar
-

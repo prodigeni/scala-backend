@@ -183,28 +183,22 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 	}
 }
 
-class Jsvc {
-	/*
-	void init(String[] arguments): Here open configuration files, create a trace file, create ServerSockets, Threads
-	void start(): Start the Thread, accept incoming connections
-	void stop(): Inform the Thread to terminate the run(), close the ServerSockets
-	void destroy(): Destroy any object created in init()
-  */
-	def init(arguments: Array[String]) {
-
-	}
-	def start() {
-
-	}
-	def stop() {
-
-	}
-	def destroy() {
-
-	}
-}
-
 object Main extends App {
+	val defaultConfDir = "/usr/wikia/docroot/"
+	val cfName: Option[String] = sys.props.get("phalanx.config") orElse {
+		// load config from first config file that exists
+		Seq(
+			"phalanx.properties",
+			defaultConfDir + "phalanx.properties",
+			"phalanx.default.properties",
+			defaultConfDir + "phalanx.default.properties")
+			.find(fileName => {
+			val file = new File(fileName)
+			file.exists() && file.canRead
+		}
+		)
+	}
+
 	def loadProperties(fileName: String): java.util.Properties = {
 		val file = new File(fileName)
 		val properties = new java.util.Properties()
@@ -212,15 +206,13 @@ object Main extends App {
 		println("Loaded properties from " + fileName)
 		properties
 	}
-
-	val cfName: Option[String] = sys.props.get("phalanx.config") orElse {
-		// load config from first config file that exists: phalanx.properties, /etc/phalanx.properties, phalanx.default.properties
-		Seq("./phalanx.properties", "/usr/wikia/conf/current/phalanx.properties", "./phalanx.default.properties",
-			"/usr/wikia/conf/current/phalanx.default.properties").find(fileName => {
-			val file = new File(fileName)
-			file.exists() && file.canRead
-		})
+	def wikiaProp(key: String) = sys.props("com.wikia.phalanx." + key)
+	def scribeClient() = {
+		val host = wikiaProp("scribe.host")
+		val port = wikiaProp("scribe.port").toInt
+		new ScribeClient("log_phalanx", host, port)
 	}
+
 	cfName match {
 		case Some(fileName) => sys.props ++= loadProperties(fileName).toMap
 		case None => {
@@ -228,31 +220,26 @@ object Main extends App {
 			System.exit(2)
 		}
 	}
-	def wikiaProp(key: String) = sys.props("com.wikia.phalanx." + key)
 
 	val logger = NiceLogger("Main")
-	logger.trace("Properties loaded")
+	logger.trace("Properties loaded from "+cfName)
 	val scribe = {
 		val scribetype = wikiaProp("scribe")
 		logger.info("Creating scribe client (" + scribetype + ")")
 		scribetype match {
-			case "send" => {
-				val host = wikiaProp("scribe.host")
-				val port = wikiaProp("scribe.port").toInt
-				new ScribeClient(host, port)
-			}
-			case "buffer" => new ScribeBuffer()
+			case "send" => scribeClient()
+			case "buffer" => new ScribeBuffer(scribeClient(), Duration(wikiaProp("scribe.flushperiod").toInt, TimeUnit.MILLISECONDS ))
 			case "discard" => new ScribeDiscard()
 		}
 	}
-	scribe(("test", Map(("somekey", "somevalue"))))()
+	scribe(Map(("somekey", "somevalue")))()
 	// make sure we're connected
 	val port = wikiaProp("port").toInt
 
 	logger.info("Loading rules from database")
 	val db = new DB(DB.DB_MASTER, "", "wikicities").connect()
 	val mainService = new MainService((old, changed) => RuleSystem.reloadSome(db, old, changed.toSet),
-		new ExceptionLogger(logger) andThen scribe.category("log_phalanx"))
+		new ExceptionLogger(logger) andThen scribe)
 
 	val config = ServerBuilder()
 		.codec(RichHttp[Request](Http()))

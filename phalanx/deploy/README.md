@@ -1,7 +1,7 @@
 # Deploying Phalanx #
 
 ## Dependencies in default configuration
-* Java 7
+* Java 6
 * Runit
 * Scribe
 
@@ -11,7 +11,8 @@
 * newrelic.jar
 * newrelic.yml
 * phalanx-server.jar
-* phalanx-test
+* phalanx
+* phalanx-raw
 
 ### in /etc/sv/phalanx
 * runit/run
@@ -19,9 +20,14 @@
 ### in /etc/sv/phalanx/log
 * runit/log/run
 
-### in /usr/conf/wikia/current
+### symlink from /etc/services/phalanx to /etc/sv/phalanx
+
+### in place pointed by env variable WIKIA_DB_YML (installed by default)
 * DB.yml - standard wikifactory configuration used by Wikia
+
+### in /usr/wikia/docroot
 * phalanx.default.properties - copied from phalanx.default.properties
+or 
 * phalanx.properties - if you wish replace default configuration
 
 

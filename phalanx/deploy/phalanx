@@ -1,0 +1,4 @@
+#!/bin/sh
+PHALANX_DIR=`dirname $0`
+java -javaagent:$PHALANX_DIR/newrelic.jar -Dnewrelic.environment=${PHALANX_ENV-phalanx-development} -jar $PHALANX_DIR/phalanx-server.jar
+

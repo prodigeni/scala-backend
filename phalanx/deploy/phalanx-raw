@@ -1,3 +1,4 @@
 #!/bin/sh
-java -jar phalanx-server.jar
+PHALANX_DIR=`dirname $0`
+java -jar $PHALANX_DIR/phalanx-server.jar
 

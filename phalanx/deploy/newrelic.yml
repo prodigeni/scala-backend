@@ -65,7 +65,10 @@ common: &default_settings
 
   # The name of the log file.
   # Default is newrelic_agent.log.
-  #log_file_name: newrelic_agent.log
+
+  # Merge application log and NewRelic log (Szumo):
+
+  log_file_name: STDOUT
   
   # The log file directory.
   # Default is the logs directory in the newrelic.jar parent directory.
@@ -229,6 +232,3 @@ phalanx-production:
   <<: *default_settings
   app_name: Phalanx
 
-phalanx-staging:
-  <<: *default_settings
-  app_name: Phalanx (Staging)

@@ -11,13 +11,13 @@ object wikifactoryTest extends App {
 	println( "test: " + resultQuery.fetch("city_last_timestamp").toString )
 
   var sc = new ScribeLogger().category("log_phalanx" )
-    .send( HashMap(
+    .sendMaps( Seq(Map(
       "blockId" -> 1,
       "blockType" -> 1,
       "blockTs" -> "2013-01-04 17:32:00",
       "blockUser" -> "Test",
       "city_id" -> 177
-    ) )
+    )) )
 
   println( "sc = " + sc )
 

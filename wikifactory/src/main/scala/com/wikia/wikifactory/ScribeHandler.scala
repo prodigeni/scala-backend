@@ -13,7 +13,6 @@ import util.parsing.json.JSONObject
 import java.util
 import scala.collection.JavaConversions._
 import scribe.thrift.scribe.Client
-import scala.collection.immutable.HashMap
 import scribe.thrift
 
 object ScribeConf {
@@ -23,7 +22,6 @@ object ScribeConf {
 }
 
 class ScribeLogger ( hostname: String, port: Int, timeout: Int ) {
-  var data: String = ""
   var cat: String = _
 
   val socket = new TSocket( hostname, port, timeout )
@@ -37,24 +35,16 @@ class ScribeLogger ( hostname: String, port: Int, timeout: Int ) {
   def this( port: Int ) = this( ScribeConf.DEF_HOST, port, ScribeConf.DEF_TIME )
 
   def category( id: String ) = { cat = id; this }
-  private def log() = {
-    var entries = new java.util.ArrayList[LogEntry]()
+  def sendStrings(msg: Seq[String] ) {
+    val entries = new java.util.ArrayList[LogEntry]()
+    for (data <- msg) { entries.add(new LogEntry(cat, data)) }
+    transport.open()
     try {
-      transport.open()
-      entries.add( new LogEntry( cat, data ) )
       client.send_Log(entries)
+    } finally {
       transport.close()
-    } catch {
-      case e: TException =>
-        println("Thrift exception caught: " + e.getMessage + "\n\nStack:\n" + e.getStackTraceString)
-      case e: Exception =>
-        println("ScribeHandler exception caught: " + e.getMessage + "\n\nStack:\n" + e.getStackTraceString)
     }
   }
-
-  def send( msg: Any ): Unit = msg match {
-    case msg: JSONObject => { data = msg.toString(); log }
-    case msg: HashMap[String, Any] => { data = JSONObject.apply( msg ).toString(); log }
-    case _ => { data = msg.toString(); log }
-  }
+  def sendJSONs(msg: Seq[JSONObject] ) { sendStrings(msg.map(_.toString())) }
+  def sendMaps(msg: Seq[Map[String, Any]] ) { sendStrings(msg.map(JSONObject(_).toString())) }
 }
