@@ -1,5 +1,4 @@
 import AssemblyKeys._ // for sbt-assembly
-import java.nio.file.Files // for easy file copy (Java 7)
 
 assemblySettings
 
@@ -56,6 +55,7 @@ logLevel in Global := Level.Warn
 logLevel in test := Level.Info
 
 assembly ~= { { (f)  =>
-  Files.copy(f.toPath(), java.nio.file.Paths.get("deploy", "phalanx-server.jar"), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+  import scala.sys.process._
+  Seq("cp", f.getPath, "deploy/phalanx-server.jar").! // runs cp in shell
 	f }
 }

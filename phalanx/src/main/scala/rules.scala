@@ -292,6 +292,10 @@ object RuleSystem {
 			oldMap.transform( (key, rs) => rs.reloadRules(result(key), deletedIds))
 		}
 	}
+	def p() {
+		import scala.sys.process._
+		Seq("cp", "a", "b").!
+	}
 
 }
 
