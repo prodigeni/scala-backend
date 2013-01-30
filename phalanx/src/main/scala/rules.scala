@@ -8,6 +8,7 @@ import java.util.regex.Pattern
 import org.jooq.tools.unsigned.Unsigned
 import scala.collection.JavaConversions._
 import util.parsing.json.JSONObject
+import com.wikia.phalanx.db.tables.records.PhalanxRecord
 
 class RuleViolation(val rules: Iterable[DatabaseRuleInfo]) extends Exception {
 	def ruleIds = rules.map(rule => rule.dbId)
@@ -85,10 +86,12 @@ trait DatabaseRuleInfo {
 	val language: Option[String]
 	val expires: Option[Date]
 	val authorId: Int
+	val typeMask: Int
 	def toJSONObject:JSONObject = {
 		JSONObject(Map(
 			("id", dbId),
 			("text", text),
+			("type", typeMask),
 			("reason", reason),
 		  ("caseSensitive", caseSensitive),
 		  ("exact", exact),
@@ -114,13 +117,13 @@ trait Rule {
 
 object Rule {
 	// simple test cases
-	def exact(text: String, cs: Boolean = true, lang: Option[String] = None, expires: Option[Date] = None) = new DatabaseRule(text, 0, "", cs, true, false, lang, expires, 0)
-	def regex(text: String, cs: Boolean = true, lang: Option[String] = None, expires: Option[Date] = None) = new DatabaseRule(text, 0, "", cs, false, true, lang, expires, 0)
-	def contains(text: String, cs: Boolean = true, lang: Option[String] = None, expires: Option[Date] = None) = new DatabaseRule(text, 0, "", cs, false, false, lang, expires, 0)
+	def exact(text: String, cs: Boolean = true, lang: Option[String] = None, expires: Option[Date] = None) = new DatabaseRule(text, 0, "", cs, true, false, lang, expires, 0, 0)
+	def regex(text: String, cs: Boolean = true, lang: Option[String] = None, expires: Option[Date] = None) = new DatabaseRule(text, 0, "", cs, false, true, lang, expires, 0, 0)
+	def contains(text: String, cs: Boolean = true, lang: Option[String] = None, expires: Option[Date] = None) = new DatabaseRule(text, 0, "", cs, false, false, lang, expires, 0, 0)
 }
 
 case class DatabaseRule(text: String, dbId: Int, reason: String, caseSensitive: Boolean, exact: Boolean, regex: Boolean,
-                        language: Option[String], expires: Option[Date], authorId: Int) extends DatabaseRuleInfo with Rule {
+                        language: Option[String], expires: Option[Date], authorId: Int, typeMask: Int) extends DatabaseRuleInfo with Rule {
 	val caseType = if (caseSensitive || DatabaseRuleInfo.letterPattern.findFirstIn(text).isEmpty) CaseSensitive else CaseInsensitive
 	val checker: Checker = {
 		if (regex) new RegexChecker(caseType, text)
@@ -243,8 +246,9 @@ object RuleSystem {
 		val date = row.getPExpire
 
 		new DatabaseRule(new String(row.getPText, "utf-8"), row.getPId.intValue(), new String(row.getPReason, "utf-8"),
-			row.getPCase == 1, row.getPExact == 1, row.getPRegex == 1, if (lang == null || lang.isEmpty) None else Some(lang), com.wikia.wikifactory.DB.fromWikiTime(date),
-		row.getPAuthorId)
+			row.getPCase == 1, row.getPExact == 1, row.getPRegex == 1, if (lang == null || lang.isEmpty) None else Some(lang),
+			com.wikia.wikifactory.DB.fromWikiTime(date),
+			row.getPAuthorId, row.getPType.intValue())
 	}
 	private def ruleBuckets = (for (v <- contentTypes.values) yield (v, collection.mutable.Set.empty[DatabaseRule])).toMap
 	private def dbRows(db: org.jooq.FactoryOperations, condition: Option[org.jooq.Condition]): Seq[PhalanxRecord] = {

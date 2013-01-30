@@ -47,7 +47,7 @@ object Respond {
 }
 
 class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => Map[String, RuleSystem],
-                  val scribe: Service[Map[String, Any], Unit]) extends Service[Request, Response] {
+                  val scribe: Service[Map[String, Any], Unit], threadCount: Option[Int] = None) extends Service[Request, Response] {
 	def this(initialRules: Map[String, RuleSystem], scribe: Service[Map[String, Any], Unit]) = this( (_, _) => initialRules, scribe)
 	val logger = NiceLogger("MainService")
 	var nextExpireDate: Option[Date] = None
@@ -55,14 +55,32 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 	val timer = new TimerFromNettyTimer(new HashedWheelTimer(1, TimeUnit.SECONDS))
 	var rules = reloader(Map.empty, Seq.empty)
 
-	val threadPoolSize = Runtime.getRuntime.availableProcessors()
+	val threadPoolSize = threadCount.getOrElse(Runtime.getRuntime.availableProcessors()*2)
 	//val threadPoolSize = 0
 
-	val futurePool  = if (threadPoolSize == 0) FuturePool.immediatePool else FuturePool(
+	val futurePool  = if (threadPoolSize <= 0) FuturePool.immediatePool else FuturePool(
 		java.util.concurrent.Executors.newFixedThreadPool(threadPoolSize, new NamedPoolThreadFactory("MainService pool"))
 	)
-
 	watchExpired()
+
+	def sendToScribe(rule: DatabaseRuleInfo, user: String, wiki: Int):Future[Unit] = {
+		/*$fields = array(
+			'blockId'			=> $blockerId,
+		'blockType'			=> $type,
+		'blockTs' 			=> wfTimestampNow(),
+		'blockUser' 		=> $wgUser->getName(),
+		'city_id' 			=> $wgCityId,
+		);*/
+		scribe(Map(
+			("blockId", rule.dbId) ,
+			("blockType", rule.typeMask),
+			("blockTs", com.wikia.wikifactory.DB.wikiCurrentTime),
+			("blockUser", user),
+			("city_id", wiki)
+    ))
+	}
+
+
 
 	override def release() {
 		logger.trace("Stopping expired timer")
@@ -235,19 +253,26 @@ object Main extends App {
 	scribe(Map(("somekey", "somevalue")))()
 	// make sure we're connected
 	val port = wikiaProp("port").toInt
+	val threadCount:Option[Int] = wikiaProp("com.wikia.phalanx.threads") match {
+		case s: String if (s != null && s.nonEmpty) => Some(s.toInt)
+		case _ => None
+	}
 
 	logger.info("Loading rules from database")
 	val db = new DB(DB.DB_MASTER, "", "wikicities").connect()
-	val mainService = new MainService((old, changed) => RuleSystem.reloadSome(db, old, changed.toSet),
-		new ExceptionLogger(logger) andThen scribe)
+	val mainService = new MainService(
+		(old, changed) => RuleSystem.reloadSome(db, old, changed.toSet),
+		new ExceptionLogger(logger) andThen scribe,
+	  threadCount
+	)
 
 	val config = ServerBuilder()
 		.codec(RichHttp[Request](Http()))
 		.name("Phalanx")
 		.maxConcurrentRequests(Seq(20, mainService.threadPoolSize).max)
 		.sendBufferSize(16*1024)
-		.recvBufferSize(16*1024)
-		.backlog(100)
+		.recvBufferSize(32*1024)
+		.backlog(500)
 		.bindTo(new java.net.InetSocketAddress(port))
 
 	val server = config.build(ExceptionFilter andThen NewRelic andThen mainService)

@@ -1,5 +1,5 @@
 #!/usr/bin/python
-import sys
+import sys, os
 from time import time
 from random import randint
 from twisted.web.client import getPage
@@ -7,9 +7,9 @@ from twisted.internet import reactor
 from twisted.internet.defer import DeferredList
 from twisted.python import log
 
-numberOfRequests = 5000
-concurrentRequests = 100
-baseUrl = "http://localhost:8080"
+numberOfRequests = int(os.environ.get('REQUESTS', 1000))
+concurrentRequests = int(os.environ.get('CONCURRENT', 100))
+baseUrl = os.environ.get('URL', "http://localhost:8080")
 
 def oneBatch(prev, ipList):
 	toDo, left = ipList[:concurrentRequests], ipList[concurrentRequests:]
