@@ -184,7 +184,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 			"%.1f %s".format(bytes / scala.math.pow(unit, exp), pre)
 		}
 	}
-	degitf stats(request: Request): Response = Respond(statsString)
+	def stats(request: Request): Response = Respond(statsString)
 	def statsString: String = {
 		val response = (rules.toSeq.map(t => {
 			val (s, ruleSystem) = t
@@ -292,5 +292,12 @@ object Main extends App {
 	val server = config.build(ExceptionFilter andThen NewRelic andThen mainService)
 	logger.info("Server started on port: " + port)
 	logger.trace("Initial stats: \n" + mainService.statsString)
+
+	sys.addShutdownHook {
+		logger.warn("Terminating")
+		server.close(Duration.MinValue)
+		mainService.release()
+		logger.warn("Shutdown complete")
+	}
 }
 
