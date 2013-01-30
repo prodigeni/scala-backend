@@ -1,5 +1,5 @@
 #!/bin/sh
-PHALANX_DIR=/usr/wikia/phalanx/lib
+PHALANX_DIR=/usr/wikia/phalanx
 sv start scribe || exit 1
 exec 2>&1
-exex chpst -u www-data:www-data java -javaagent:$PHALANX_DIR/newrelic.jar -Dnewrelic.environment=${PHALANX_ENV-phalanx-development} -jar $PHALANX_DIR/phalanx-server.jar
+exec chpst -u www-data:www-data java -javaagent:$PHALANX_DIR/newrelic.jar -Dnewrelic.environment=${PHALANX_ENV-phalanx-development} -jar $PHALANX_DIR/phalanx-server.jar
