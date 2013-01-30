@@ -184,14 +184,14 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 }
 
 object Main extends App {
-	val defaultConfDir = "/usr/wikia/docroot/"
 	val cfName: Option[String] = sys.props.get("phalanx.config") orElse {
 		// load config from first config file that exists
 		Seq(
 			"phalanx.properties",
-			defaultConfDir + "phalanx.properties",
+			"/usr/wikia/conf/current/phalanx.properties",
+			"/usr/wikia/docroot/phalanx.properties",
 			"phalanx.default.properties",
-			defaultConfDir + "phalanx.default.properties")
+			"/usr/wikia/phalanx/phalanx.default.properties")
 			.find(fileName => {
 			val file = new File(fileName)
 			file.exists() && file.canRead
