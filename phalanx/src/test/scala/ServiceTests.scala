@@ -59,7 +59,7 @@ class ServiceTests extends FlatSpec {
 		val request = RequestBuilder().url(address + "match?type=tests&content=fuck").buildGet()
 		val response = client(request)()
 		val content = response.getContent.toString(charset)
-		assert(content === "[{\"regex\" : true, \"expires\" : \"\", \"text\" : \"^fuck\", \"reason\" : \"\", \"exact\" : false, \"caseSensitive\" : false, \"id\" : 589, \"language\" : \"\", \"authorId\" : 0}]")
+		assert(content === "[{\"regex\" : false, \"expires\" : \"\", \"text\" : \"fuck\", \"reason\" : \"\", \"exact\" : false, \"caseSensitive\" : false, \"id\" : 4, \"language\" : \"\", \"authorId\" : 0, \"type\" : 8}]")
 	}
 
 	it should "support multiple content parameters" in {

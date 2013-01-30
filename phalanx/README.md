@@ -58,7 +58,7 @@ Each rule info is a JSON dictionary with following keys: id, text, reason, caseS
 
 `> curl "http://localhost:8080/match?lang=en&type=content&content=pornhub.com"`
 
-`[{"regex" : true, "expires" : "", "text" : "pornhub\\.com", "reason" : "SpamRegex initial import", "exact" : false, "caseSensitive" : false, "id" : 4009, "language" : "", "authorId" : 184532}]`
+`[{"regex" : true, "expires" : "", "text" : "pornhub\\.com", "reason" : "SpamRegex initial import", "exact" : false, "caseSensitive" : false, "id" : 4009, "language" : "", "authorId" : 184532, "type" : 8}]`
 
 
 ### /validate

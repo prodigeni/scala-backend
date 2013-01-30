@@ -176,16 +176,30 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 		afterReload(ids)
 		Respond.ok()
 	}
-	def stats(request: Request): Response = {
-		Respond(statsString)
+	def humanReadableByteCount(bytes: Long): String = {
+		val unit: Int = 1024
+		if (bytes < unit) bytes + " B" else {
+			val exp = (scala.math.log(bytes) / scala.math.log(unit)).toInt
+			val pre = "KMGTPE".charAt(exp - 1) + "iB"
+			"%.1f %s".format(bytes / scala.math.pow(unit, exp), pre)
+		}
 	}
+	degitf stats(request: Request): Response = Respond(statsString)
 	def statsString: String = {
 		val response = (rules.toSeq.map(t => {
 			val (s, ruleSystem) = t
 			s + ":\n" + (ruleSystem.stats.map {
 				"  " + _
 			}.mkString("\n")) + "\n"
-		}) ++ Seq("Next rule expire date: " + nextExpireDate)).mkString("\n")
+		}) ++ nextExpireDate.map("Next rule expire date: " + _.toString)
+			++ sys.props.get("newrelic.environment").map("NewRelic environment: "+_)
+			++ Seq(
+		  "Worker threads: " + threadPoolSize,
+			"Max memory: " + humanReadableByteCount(sys.runtime.maxMemory()),
+		  "Free memory: " + humanReadableByteCount(sys.runtime.freeMemory()),
+		  "Total memory: " + humanReadableByteCount(sys.runtime.totalMemory()),
+		  ""
+		)).mkString("\n")
 		response
 	}
 	def apply(request: Request): Future[Response] = {
