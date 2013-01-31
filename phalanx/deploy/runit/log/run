@@ -1,5 +1,0 @@
-#!/bin/sh
-LOG_DIR=/var/log/runit/phalanx
-[ ! -d $LOG_DIR ] && mkdir -p $LOG_DIR
-exec /usr/bin/svlogd $LOG_DIR
-
