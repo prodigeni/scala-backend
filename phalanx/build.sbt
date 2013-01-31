@@ -6,7 +6,7 @@ name := "phalanx"
 
 organization := "com.wikia"
 
-version := "0.3"
+version := "0.4"
 
 scalaVersion := "2.9.2"
 
@@ -16,7 +16,7 @@ resolvers += "scala-tools-releases" at "https://repository.jboss.org/nexus/conte
 
 resolvers += "scala-tools.org" at "http://scala-tools.org/repo-releases"
 
-resolvers += "newrelice agent API" at "http://download.newrelic.com"
+resolvers += "NewRelic agent API" at "http://download.newrelic.com"
 
 resolvers += "Wikia Maven repository" at "http://pkg-s1.wikia-prod/maven/releases/"
 
@@ -46,16 +46,18 @@ libraryDependencies ++= Seq(
 
 scalacOptions ++= Seq("-deprecation", "-unchecked")
 
-artifact in (Compile, assembly) ~= { art => art.copy(`classifier` = Some("server")) }
+artifact in (Compile, assembly) ~= { art => art.copy(`classifier` = Some("assembly")) }
 
 addArtifact(artifact in (Compile, assembly), assembly)
 
 logLevel in Global := Level.Warn
 
+logLevel in publish := Level.Info
+
 logLevel in test := Level.Info
 
-assembly ~= { { (f)  =>
+assembly ~= { (f)  => {
   import scala.sys.process._
   Seq("cp", f.getPath, "deploy/phalanx-server.jar").! // runs cp in shell
-	f }
+  f }
 }

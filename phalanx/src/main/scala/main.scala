@@ -45,11 +45,7 @@ object Respond {
 	val ok = Respond("ok\n")
 	val failure = Respond("failure\n")
 	val contentMissing = error("content parameter is missing")
-
-
 }
-
-
 
 
 class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => Map[String, RuleSystem],
