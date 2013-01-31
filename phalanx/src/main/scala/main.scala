@@ -42,9 +42,15 @@ object Respond {
 		Respond(jsonData.toString(JSONFormat.defaultFormatter), Status.Ok, Message.ContentTypeJson)
 	}
 	def error(info: String, status: HttpResponseStatus = Status.InternalServerError) = Respond(info + "\n", status)
-	def ok(s: String = "") = Respond("ok\n" + s)
-	def failure(s: String = "") = Respond("failure\n" + s)
+	val ok = Respond("ok\n")
+	val failure = Respond("failure\n")
+	val contentMissing = error("content parameter is missing")
+
+
 }
+
+
+
 
 class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => Map[String, RuleSystem],
                   val scribe: Service[Map[String, Any], Unit], threadCount: Option[Int] = None) extends Service[Request, Response] {
@@ -53,34 +59,12 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 	var nextExpireDate: Option[Date] = None
 	var expireWatchTask: Option[TimerTask] = None
 	val timer = new TimerFromNettyTimer(new HashedWheelTimer(1, TimeUnit.SECONDS))
-	var rules = reloader(Map.empty, Seq.empty)
-
+	@transient var rules = reloader(Map.empty, Seq.empty)
 	val threadPoolSize = threadCount.getOrElse(Runtime.getRuntime.availableProcessors()*2)
-	//val threadPoolSize = 0
-
 	val futurePool  = if (threadPoolSize <= 0) FuturePool.immediatePool else FuturePool(
 		java.util.concurrent.Executors.newFixedThreadPool(threadPoolSize, new NamedPoolThreadFactory("MainService pool"))
 	)
 	watchExpired()
-
-	def sendToScribe(rule: DatabaseRuleInfo, user: String, wiki: Int):Future[Unit] = {
-		/*$fields = array(
-			'blockId'			=> $blockerId,
-		'blockType'			=> $type,
-		'blockTs' 			=> wfTimestampNow(),
-		'blockUser' 		=> $wgUser->getName(),
-		'city_id' 			=> $wgCityId,
-		);*/
-		scribe(Map(
-			("blockId", rule.dbId) ,
-			("blockType", rule.typeMask),
-			("blockTs", com.wikia.wikifactory.DB.wikiCurrentTime),
-			("blockUser", user),
-			("city_id", wiki)
-    ))
-	}
-
-
 
 	override def release() {
 		logger.trace("Stopping expired timer")
@@ -111,7 +95,6 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 		}
 	}
 	def expire() {
-		// todo: somehow run this on main finagle thread?
 		val now = new Date().getTime
 		val expired = rules.values.flatMap(ruleSystem => ruleSystem.expiring.takeWhile(rule => rule.expires.get.getTime <= now)).map(r => r.dbId)
 		afterReload(expired)
@@ -120,61 +103,22 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 		rules = reloader(rules, expired).toMap
 		watchExpired()
 	}
-	def handleCheckOrMatch(request: Request, func: (RuleSystem, Iterable[Checkable]) => Response): Response = {
-		val params =  request.params
-		val checkType = params.get("type")
-		val ruleSystem = checkType match {
-			case Some(s: String) =>  rules.get(s)
-			case None => None
-		}
-		ruleSystem match {
-			case None => Respond.error("Unknown type parameter")
-			case Some(ruleSystem: RuleSystem) => {
-				val content = params.getAll("content")
-				if (content.isEmpty) Respond.error("content parameter is missing")
-				else {
-					val lang = params.getOrElse("lang", "en")
-					func(ruleSystem, content.map(s => Checkable(s, lang)))
-				}
-			}
-		}
-	}
-	def handleCheck(request: Request) = {
-		handleCheckOrMatch(request, (ruleSystem, checkables) => {
-			if (checkables.exists(c => ruleSystem.isMatch(c))) {
-				Respond.failure()
-			} else {
-				Respond.ok()
-			}
-		})
-	}
-	def handleMatch(request: Request) = {
-		handleCheckOrMatch(request, (ruleSystem, checkables) => {
-			val limit = request.params.getIntOrElse("limit", 1)
-			val matches = checkables.toStream.flatMap(c => ruleSystem.allMatches(c)).take(limit)
-			Respond.json(matches)
-		})
-	}
+	type checkOrMatch = (Iterable[RuleSystem], Iterable[Checkable], Option[String], Option[Int]) => Response
 	def validateRegex(request: Request) = {
 		val s = request.params.getOrElse("regex", "")
 		val response = try {
 			s.r
-			Respond.ok()
+			Respond.ok
 		} catch {
-			case e: PatternSyntaxException => Respond.failure()
+			case e: PatternSyntaxException => Respond.failure
 		}
 		response
 	}
 	def reload(request: Request) = {
-		val changed = request.getParam("changed", "").split(',').toSeq.filter {
-			_ != ""
-		}
-		val ids = if (changed.isEmpty) Seq.empty[Int]
-		else changed.map {
-			_.toInt
-		}
+		val changed = request.getParam("changed", "").split(',').toSeq.filter(_ != "")
+		val ids = if (changed.isEmpty) Seq.empty[Int]	else changed.map(_.toInt)
 		afterReload(ids)
-		Respond.ok()
+		Respond.ok
 	}
 	def humanReadableByteCount(bytes: Long): String = {
 		val unit: Int = 1024
@@ -205,12 +149,50 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 	def apply(request: Request): Future[Response] = {
 		Path(request.path) match {
 			case Root => Future(Respond("PHALANX ALIVE"))
-			case Root / "check" => futurePool(handleCheck(request))
-			case Root / "match" => futurePool(handleMatch(request))
+			case Root / "check" => futurePool(ParsedRequest(request).checkResponse)
+			case Root / "match" => futurePool(ParsedRequest(request).matchResponse)
 			case Root / "validate" => futurePool(validateRegex(request))
 			case Root / "reload" => futurePool(reload(request))
 			case Root / "stats" => futurePool(stats(request))
 			case _ => Future(Respond.error("not found", Status.NotFound))
+		}
+	}
+
+	case class ParsedRequest(request: Request) {
+		val params = request.params
+		val lang = params.getOrElse("lang", "en")
+		val content = params.getAll("content").map(s => Checkable(s, lang))
+		val user = params.get("user")
+		val wiki = params.get("wiki").map(_.toInt)
+		val checkTypes = params.getAll("type")
+		val ruleSystems:Iterable[RuleSystem] = if (checkTypes.isEmpty) rules.values else checkTypes.map(s => rules.get(s)).flatten
+		val combinations:Iterable[(RuleSystem, Checkable)] = (for (r <- ruleSystems; c <- content) yield (r, c))
+
+		def findMatches(limit: Int):Iterable[DatabaseRuleInfo] = {
+			val result:Iterable[DatabaseRuleInfo] = combinations.view.flatMap( (pair: (RuleSystem, Checkable)) => pair._1.allMatches(pair._2) ).take(limit).force
+			result.headOption.map(sendToScribe(_))
+			result
+		}
+		def checkResponse = {
+			if (content.isEmpty) Respond.contentMissing else {
+				if (findMatches(1).isEmpty) Respond.ok else Respond.failure
+			}
+		}
+		def matchResponse = {
+			if (content.isEmpty) Respond.contentMissing else {
+				val limit = request.params.getIntOrElse("limit", 1)
+				val matches = findMatches(limit)
+				Respond.json(matches)
+			}
+		}
+		def sendToScribe(rule: DatabaseRuleInfo):Future[Unit] = {
+			if (user.isDefined && wiki.isDefined)	scribe(Map(
+				("blockId", rule.dbId) ,
+				("blockType", rule.typeMask),
+				("blockTs", com.wikia.wikifactory.DB.wikiCurrentTime),
+				("blockUser", user.get),
+				("city_id", wiki.get)
+			)) else Future.Done
 		}
 	}
 }
