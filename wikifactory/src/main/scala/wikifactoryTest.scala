@@ -5,12 +5,17 @@ import com.wikia.wikifactory._;
  *  main object for testing scala classes & objects
  */
 object wikifactoryTest extends App {
-	val db = new DB( DB.DB_MASTER, "", "wikicities" ).connect
-	val resultQuery = db.resultQuery("select city_last_timestamp from city_list limit 1")
+  var i = 0;
+  while ( i < 10 ) {
+    val db = new DB( DB.DB_MASTER, "", "wikicities" ).connect
+    val resultQuery = db.resultQuery("select city_last_timestamp from city_list limit 1")
+	  println( "test: " + resultQuery.fetch("city_last_timestamp").toString )
+    i += 1
+    Thread.sleep(20000)
+    println( "sleep" )
+  }
 
-	println( "test: " + resultQuery.fetch("city_last_timestamp").toString )
-
-  var sc = new ScribeLogger().category("log_phalanx" )
+  /*var sc = new ScribeLogger().category("log_phalanx" )
     .sendMaps( Seq(Map(
       "blockId" -> 1,
       "blockType" -> 1,
@@ -19,6 +24,5 @@ object wikifactoryTest extends App {
       "city_id" -> 177
     )) )
 
-  println( "sc = " + sc )
-
+  println( "sc = " + sc ) */
 }
