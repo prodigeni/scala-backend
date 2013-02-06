@@ -2,7 +2,6 @@ package com.wikia.phalanx
 
 import collection.mutable
 import com.wikia.phalanx.db.Tables.PHALANX
-import com.wikia.phalanx.db.tables.records.PhalanxRecord
 import java.util.Date
 import java.util.regex.Pattern
 import org.jooq.tools.unsigned.Unsigned
@@ -178,7 +177,7 @@ class FlatRuleSystem(initialRules: Iterable[DatabaseRule]) extends RuleSystem {
 }
 
 class CombinedRuleSystem(initialRules: Iterable[DatabaseRule]) extends FlatRuleSystem(initialRules) {
-	val logger = NiceLogger("RuleSystem")
+	private val logger = NiceLogger("RuleSystem")
 	val checkers: Map[Option[String], Iterable[Checker]] = extractCheckers.withDefaultValue(Set.empty)
 
 	def extractCheckers: Map[Option[String], Iterable[Checker]] = {

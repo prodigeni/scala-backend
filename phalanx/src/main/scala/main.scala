@@ -25,7 +25,7 @@ class ExceptionLogger[Req, Rep](val logger: NiceLogger) extends SimpleFilter[Req
 	def this(loggerName: String) = this(NiceLogger(loggerName))
 	def apply(request: Req, service: Service[Req, Rep]): Future[Rep] = {
 		service(request).onFailure((exception) => {
-			logger.error("Exception in service", exception)
+			logger.exception("Exception in service", exception)
 		})
 	}
 }
@@ -51,7 +51,7 @@ object Respond {
 class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => Map[String, RuleSystem],
                   val scribe: Service[Map[String, Any], Unit], threadCount: Option[Int] = None) extends Service[Request, Response] {
 	def this(initialRules: Map[String, RuleSystem], scribe: Service[Map[String, Any], Unit]) = this( (_, _) => initialRules, scribe)
-	val logger = NiceLogger("MainService")
+	private val logger = NiceLogger("MainService")
 	var nextExpireDate: Option[Date] = None
 	var expireWatchTask: Option[TimerTask] = None
 	val timer = new TimerFromNettyTimer(new HashedWheelTimer(1, TimeUnit.SECONDS))
@@ -273,7 +273,7 @@ object Main extends App {
 
 	sys.addShutdownHook {
 		logger.warn("Terminating")
-		server.close(Duration.MinValue)
+		server.close(Duration(3, TimeUnit.SECONDS))
 		mainService.release()
 		logger.warn("Shutdown complete")
 	}

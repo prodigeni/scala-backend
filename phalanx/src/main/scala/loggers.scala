@@ -20,7 +20,7 @@ case class NiceLogger(name: String) {
 	def error(messageBlock: => String) {
 		if (logger.isErrorEnabled) logger.error(messageBlock)
 	}
-	def error(message: String, error: Throwable) {
+	def exception(message: String, error: Throwable) {
 		if (logger.isErrorEnabled) logger.error(message, error)
 	}
 	def timeIt[T](name:String)(func: => T):T = {
@@ -41,4 +41,7 @@ case class NiceLogger(name: String) {
 			})
 		} else future
 	}
+
+	lazy val functions = Map( ("info", info _), ("error", error _), ("debug", debug _), ("warn", warn _), ("trace", trace _) )
+	def apply(level:String, messageBlock: => String) = functions.get(level).map { _(messageBlock) }
 }
