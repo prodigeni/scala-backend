@@ -6,13 +6,17 @@ import com.wikia.wikifactory._;
  */
 object wikifactoryTest extends App {
   var i = 0;
-  while ( i < 10 ) {
+  while ( i < 100 ) {
     val db = new DB( DB.DB_MASTER, "", "wikicities" ).connect
-    val resultQuery = db.resultQuery("select city_last_timestamp from city_list limit 1")
-	  println( "test: " + resultQuery.fetch("city_last_timestamp").toString )
-    i += 1
-    Thread.sleep(20000)
-    println( "sleep" )
+    if ( db != null ) {
+      val resultQuery = db.resultQuery("select city_last_timestamp from city_list limit 1")
+      println( "test: " + resultQuery.fetch("city_last_timestamp").toString )
+      i += 1
+      println( "sleep" )
+      Thread.sleep(5000)
+    } else {
+      println( "No connection" );
+    }
   }
 
   /*var sc = new ScribeLogger().category("log_phalanx" )

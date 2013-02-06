@@ -9,12 +9,12 @@
 package com.wikia.wikifactory
 
 import collection.JavaConversions._
-import java.sql.DriverManager
+import java.sql.{DriverManager, SQLException}
 import org.jooq._
 import org.jooq.impl._
 import org.jooq.impl.Factory._
 import java.text.{ParsePosition, FieldPosition, DateFormat}
-import java.util.Date
+import java.util.{Properties, Date}
 
 object DB {
   val DB_MASTER       : Int = -2
@@ -106,17 +106,32 @@ class DB( var dbType: Int = DB.DB_SLAVE, var dbGroup: String = None.toString(), 
 
   def connect() : Factory = {
     val dbDriver = "com." + dbTemplate.get("type") + ".jdbc.Driver"
-    val dbConn = "jdbc:" + dbTemplate.get("type") + "://" + dbTemplate.get("host") + "/" + dbName +
-      "?zeroDateTimeBehavior=convertToNull&autoReconnect=true&failOverReadOnly=false&initialTimeout=1"
-    Class.forName( dbDriver )
+    val dbConn = "jdbc:" + dbTemplate.get("type") + "://" + dbTemplate.get("host") + "/" + dbName;
 
     val dialect = dbTemplate.get("type") match {
       case "mysql" => SQLDialect.MYSQL
       case "postgresql" => SQLDialect.POSTGRES
     }
 
-    val c = DriverManager.getConnection( dbConn, dbTemplate.get("user"), dbTemplate.get("password") )
-    new Factory(c, dialect)
+    try {
+      Class.forName( dbDriver )
+
+      var props = new Properties();
+      props.setProperty( "zeroDateTimeBehavior", "convertToNull" );
+      props.setProperty( "user", dbTemplate.get("user") );
+      props.setProperty( "password", dbTemplate.get("password") );
+      props.setProperty( "autoReconnect", "true");
+      props.setProperty( "characterEncoding", "UTF-8" );
+      props.setProperty( "failOverReadOnly", "false" );
+      props.setProperty( "testOnBorrow", "true" );
+      props.setProperty( "validationQuery", "SELECT 1");
+
+      var conn = DriverManager.getConnection( dbConn, props )
+      new Factory(conn, dialect)
+    } catch {
+      case e: SQLException => println("exception caught: " + e.getMessage + "\n\nStack:\n" + e.getStackTraceString)
+      null
+    }
   }
   // TO DO
   def lightMode() : Boolean = false
