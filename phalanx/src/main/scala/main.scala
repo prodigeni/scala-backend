@@ -161,7 +161,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 		val user = params.get("user")
 		val wiki = params.get("wiki").map(_.toInt)
 		val checkTypes = params.getAll("type")
-		val ruleSystems:Iterable[RuleSystem] = if (checkTypes.isEmpty) rules.values else checkTypes.map(s => rules.get(s)).flatten
+		val ruleSystems:Iterable[RuleSystem] = if (checkTypes.isEmpty) rules.values else checkTypes.map(s => rules(s)).toSet
 		val combinations:Iterable[(RuleSystem, Checkable)] = (for (r <- ruleSystems; c <- content) yield (r, c))
 
 		def findMatches(limit: Int):Iterable[DatabaseRuleInfo] = {
