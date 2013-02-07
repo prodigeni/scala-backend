@@ -5,6 +5,13 @@ import collection.mutable
 package object phalanx {
   implicit def string2Checkable(s:String): Checkable = new Checkable(s)
 	implicit def iterable2Group[A, T <: Iterable[A]](obj: T):RichIterableGroup[A] = new RichIterableGroup(obj)
+	def tryNTimes[T](n: Int, block: => T):Either[Throwable, T] = {
+		try {
+				Right(block)
+		} catch {
+			case e: Throwable => if (n<=0) Left(e) else tryNTimes(n-1, block)
+		}
+	}
 }
 class RichIterableGroup[A](val obj: Iterable[A]) {
 	// adapted from TraversableLike.groupBy

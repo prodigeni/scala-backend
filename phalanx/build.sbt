@@ -6,19 +6,14 @@ name := "phalanx"
 
 organization := "com.wikia"
 
-version := "0.4"
+version := "0.5"
 
-scalaVersion := "2.9.2"
+scalaVersion := "2.10.0"
 
-resolvers += "twitter" at "http://maven.twttr.com"
-
-resolvers += "scala-tools-releases" at "https://repository.jboss.org/nexus/content/repositories/scala-tools-releases"
-
-resolvers += "scala-tools.org" at "http://scala-tools.org/repo-releases"
-
-resolvers += "NewRelic agent API" at "http://download.newrelic.com"
-
-resolvers += "Wikia Maven repository" at "http://pkg-s1.wikia-prod/maven/releases/"
+resolvers ++= Seq(
+	"Wikia Maven repository" at "http://pkg-s1.wikia-prod/maven/releases/",
+	"NewRelic agent API" at "http://download.newrelic.com"
+)
 
 publishMavenStyle := true
 
@@ -35,10 +30,10 @@ publishTo <<= (version) { version: String =>
 }
 
 libraryDependencies ++= Seq(
-  "com.wikia" %% "wikifactory" % "0.6",
-  "com.twitter" % "finagle-core" % "5.3.1",
-  "com.twitter" % "finagle-http" % "5.3.1",
-  "org.scalatest" %% "scalatest" % "1.8" % "test",
+  "com.wikia" %% "wikifactory" % "0.7",
+  "com.twitter" % "finagle-core_2.10" % "6.1.1",
+  "com.twitter" % "finagle-http_2.10" % "6.1.1",
+  "org.scalatest" % "scalatest_2.10" % "1.9.1" % "test",
   "net.sf.opencsv" % "opencsv" % "2.0" % "test",
   "org.slf4j" % "slf4j-simple" % "1.7.2",
   "newrelic.java-agent" % "newrelic-api" % "2.7.0"
@@ -50,11 +45,11 @@ artifact in (Compile, assembly) ~= { art => art.copy(`classifier` = Some("assemb
 
 addArtifact(artifact in (Compile, assembly), assembly)
 
-logLevel in Global := Level.Warn
+// logLevel in Global := Level.Warn
 
-logLevel in publish := Level.Info
+// logLevel in publish := Level.Info
 
-logLevel in test := Level.Info
+// logLevel in test := Level.Info
 
 assembly ~= { (f)  => {
   import scala.sys.process._

@@ -252,11 +252,16 @@ object RuleSystem {
 	private def ruleBuckets = (for (v <- contentTypes.values) yield (v, collection.mutable.Set.empty[DatabaseRule])).toMap
 	private def dbRows(db: org.jooq.FactoryOperations, condition: Option[org.jooq.Condition]): Seq[PhalanxRecord] = {
 		logger.info("Getting database rows")
-		val query = db.selectFrom(PHALANX).where(PHALANX.P_EXPIRE.isNull).or("p_expire > ?", com.wikia.wikifactory.DB.wikiCurrentTime)
-		val rows = (condition match {
-			case None => query
-			case Some(x) => query.and(x)
-		}).fetch().toIndexedSeq
+		val rows = tryNTimes(3, {
+			val query = db.selectFrom(PHALANX).where(PHALANX.P_EXPIRE.isNull).or("p_expire > ?", com.wikia.wikifactory.DB.wikiCurrentTime)
+			(condition match {
+				case None => query
+				case Some(x) => query.and(x)
+			}).fetch().toIndexedSeq
+		}) match {
+			case Right(x) => x
+			case Left(e) => throw e
+		}
 		logger.info("Got " + rows + " rows")
 		rows
 	}
@@ -274,7 +279,7 @@ object RuleSystem {
 			}
 			catch {
 				case e: java.util.regex.PatternSyntaxException => None
-				case e => throw e
+				case e: Throwable => throw e
 			}
 		}
 		(result, ids)

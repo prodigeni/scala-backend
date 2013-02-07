@@ -1,7 +1,7 @@
 package com.wikia.phalanx
 
 import com.twitter.finagle.Service
-import com.twitter.util.{Duration, FuturePool, Future}
+import com.twitter.util.{Time, Duration, FuturePool, Future}
 import com.wikia.wikifactory.ScribeLogger
 import java.util.concurrent.{TimeUnit, Executors}
 import com.twitter.finagle.util.TimerFromNettyTimer
@@ -45,9 +45,9 @@ class ScribeBuffer(val other: ScribeLike, val duration: Duration) extends Scribe
 		if (toFlush.nonEmpty) other.many(toFlush.toSeq)()
 	}
 
-	override def release() {
+	override def close(deadline: Time) = {
 		timer.stop()
-		other.release()
+		other.close(deadline)
 	}
 }
 class ScribeDiscard extends ScribeLike {

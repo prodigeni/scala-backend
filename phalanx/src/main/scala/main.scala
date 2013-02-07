@@ -62,11 +62,11 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 	)
 	watchExpired()
 
-	override def release() {
+	override def close(deadline: Time) = {
 		logger.trace("Stopping expired timer")
 		timer.stop()
 		logger.trace("Stopping scribe client")
-		scribe.release()
+		scribe.close(deadline)
 	}
 	def watchExpired() {
 		val minDates = rules.values.flatMap(ruleSystem => ruleSystem.expiring.headOption.map(rule => rule.expires.get))
@@ -274,7 +274,7 @@ object Main extends App {
 	sys.addShutdownHook {
 		logger.warn("Terminating")
 		server.close(Duration(3, TimeUnit.SECONDS))
-		mainService.release()
+		mainService.close()
 		logger.warn("Shutdown complete")
 	}
 }

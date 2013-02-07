@@ -1,4 +1,5 @@
 #!/bin/sh
 PHALANX_DIR=`dirname $0`
-java -javaagent:$PHALANX_DIR/newrelic.jar -Dnewrelic.environment=${PHALANX_ENV-phalanx-development} -jar $PHALANX_DIR/phalanx-server.jar
+JAVA_OPTIONS="-Xmx64m -XX:ThreadStackSize=192" 
+java $JAVA_OPTIONS -javaagent:$PHALANX_DIR/newrelic.jar -Dnewrelic.environment=${PHALANX_ENV-phalanx-development} -jar $PHALANX_DIR/phalanx-server.jar
 
