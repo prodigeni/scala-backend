@@ -165,7 +165,8 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 		val combinations:Iterable[(RuleSystem, Checkable)] = (for (r <- ruleSystems; c <- content) yield (r, c))
 
 		def findMatches(limit: Int):Iterable[DatabaseRuleInfo] = {
-			val result:Iterable[DatabaseRuleInfo] = combinations.view.flatMap( (pair: (RuleSystem, Checkable)) => pair._1.allMatches(pair._2) ).take(limit).force
+			val matches = combinations.view.flatMap( (pair: (RuleSystem, Checkable)) => pair._1.allMatches(pair._2) )
+			val result:Iterable[DatabaseRuleInfo] = (if (limit > 0) matches.take(limit).force else matches.force)
 			result.headOption.map(sendToScribe(_))
 			result
 		}
