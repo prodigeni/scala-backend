@@ -10,7 +10,8 @@
 * or one JAR (above) in production "java -jar <jarname>"
 
 ## Tests
-* just use sbt test
+* use sbt test for unittests
+* use doctests wrapper ( https://raw.github.com/Szumo/szumo-utils/master/doctests ) to run curl examples in this file (start server with deploy/phalanx-raw first)
 
 ## Web API URLs
 * Parameters may be passed as query parameters or POST parameters. Both GET and POST may be used.
@@ -18,6 +19,11 @@
 
 ### /
 Responds with: `PHALANX ALIVE` to show that the server works.
+
+```
+$ curl --silent "http://localhost:8080/"
+PHALANX ALIVE
+```
 
 ### /check
 
@@ -31,34 +37,40 @@ Result will be either `ok\n` or `failure\n`
 
 Examples:
 
-`> curl "http://localhost:8080/check?lang=en&type=content&content=hello"`
+```
+$ curl --silent "http://localhost:8080/check?lang=en&type=content&content=hello"
+ok
+```
 
-`ok`
+```
+$ curl --silent "http://localhost:8080/check?lang=en&type=karamba&content=hello"
+Unknown type parameter
+```
 
-`> curl "http://localhost:8080/check?lang=en&type=karamba&content=hello"`
-
-`Unknown type parameter`
-
-`> curl "http://localhost:8080/check?lang=en&type=content&content=pornhub.com"`
-
-`failure`
+```
+$ curl --silent "http://localhost:8080/check?lang=en&type=content&content=pornhub.com"
+failure
+```
 
 
 ### /match
 Paremeters are the same as for `/check`, but results will be a json list (potentially empty) of matching rule info.
 Each rule info is a JSON dictionary with following keys: id, text, reason, caseSensitive, exact, regex, language, expires, authorId
 
-`> curl "http://localhost:8080/match?lang=en&type=content&content=hello"`
+```
+$ curl --silent "http://localhost:8080/match?lang=en&type=content&content=hello"
+[]
+```
 
-`[]`
+```
+$ curl --silent "http://localhost:8080/match?lang=en&type=karamba&content=hello"
+Unknown type parameter
+```
 
-`> curl "http://localhost:8080/match?lang=en&type=karamba&content=hello"`
-
-`Unknown type parameter`
-
-`> curl "http://localhost:8080/match?lang=en&type=content&content=pornhub.com"`
-
-`[{"regex" : true, "expires" : "", "text" : "pornhub\\.com", "reason" : "SpamRegex initial import", "exact" : false, "caseSensitive" : false, "id" : 4009, "language" : "", "authorId" : 184532, "type" : 8}]`
+```
+$ curl --silent "http://localhost:8080/match?lang=en&type=content&content=pornhub.com"
+[{"regex" : true, "expires" : "", "text" : "pornhub\\.com", "reason" : "SpamRegex initial import", "exact" : false, "caseSensitive" : false, "id" : 4009, "language" : "", "authorId" : 184532, "type" : 1}]
+```
 
 
 ### /validate
@@ -67,28 +79,31 @@ Result will be either `ok\n` or `failure\n`
 
 Examples:
 
-`> curl "http://localhost:8080/validate?regex=^alamakota$"`
+```
+$ curl --silent "http://localhost:8080/validate?regex=^alamakota$"
+ok
+```
 
-`ok`
-
-`> curl "http://localhost:8080/validate?regex=^alama(((kota$"`
-
-`failure`
+```
+$ curl --silent "http://localhost:8080/validate?regex=^alama(((kota$"
+failure
+```
 
 ### /reload
 Optional parameter: changed - comma seperated list of integer rule ids for partial reload
 If not give, full reload will be done.
 
-`> curl "http://localhost:8080/reload?changed=1,2,3"`
-
-`ok`
+```
+$ curl --silent "http://localhost:8080/reload?changed=1,2,3"
+ok
+```
 
 ### /stats
 Show some text info about currenty loaded rules.
 
 Example:
 
-`> curl "http://localhost:8080/stats"`
+`$ curl --silent "http://localhost:8080/stats"`
 
     email:
       CombinedRuleSystem with total 75 rules and 3 checkers

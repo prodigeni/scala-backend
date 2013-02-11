@@ -12,7 +12,7 @@ import com.twitter.util._
 import com.wikia.wikifactory._
 import java.io.{FileInputStream, File}
 import java.util.regex.PatternSyntaxException
-import java.util.{Calendar, Date}
+import java.util.{NoSuchElementException, Calendar, Date}
 import org.jboss.netty.handler.codec.http.HttpResponseStatus
 import org.jboss.netty.util.HashedWheelTimer
 import scala.Some
@@ -45,6 +45,7 @@ object Respond {
 	val ok = Respond("ok\n")
 	val failure = Respond("failure\n")
 	val contentMissing = error("content parameter is missing")
+	val unknownType = error("Unknown type parameter")
 }
 
 
@@ -161,7 +162,12 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 		val user = params.get("user")
 		val wiki = params.get("wiki").map(_.toInt)
 		val checkTypes = params.getAll("type")
-		val ruleSystems:Iterable[RuleSystem] = if (checkTypes.isEmpty) rules.values else checkTypes.map(s => rules(s)).toSet
+		val ruleSystems:Iterable[RuleSystem] = if (checkTypes.isEmpty) rules.values else
+			try {
+			checkTypes.map(s => rules(s)).toSet
+			} catch {
+				case _:NoSuchElementException => Set.empty
+			}
 		val combinations:Iterable[(RuleSystem, Checkable)] = (for (r <- ruleSystems; c <- content) yield (r, c))
 
 		def findMatches(limit: Int):Iterable[DatabaseRuleInfo] = {
@@ -171,16 +177,18 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 			result
 		}
 		def checkResponse = {
-			if (content.isEmpty) Respond.contentMissing else {
-				if (findMatches(1).isEmpty) Respond.ok else Respond.failure
-			}
+			if (ruleSystems.isEmpty) Respond.unknownType else
+				if (content.isEmpty) Respond.contentMissing else {
+					if (findMatches(1).isEmpty) Respond.ok else Respond.failure
+				}
 		}
 		def matchResponse = {
-			if (content.isEmpty) Respond.contentMissing else {
-				val limit = request.params.getIntOrElse("limit", 1)
-				val matches = findMatches(limit)
-				Respond.json(matches)
-			}
+			if (ruleSystems.isEmpty) Respond.unknownType else
+				if (content.isEmpty) Respond.contentMissing else {
+					val limit = request.params.getIntOrElse("limit", 1)
+					val matches = findMatches(limit)
+					Respond.json(matches)
+				}
 		}
 		def sendToScribe(rule: DatabaseRuleInfo):Future[Unit] = {
 			if (user.isDefined && wiki.isDefined)	scribe(Map(
@@ -243,8 +251,6 @@ object Main extends App {
 			case "discard" => new ScribeDiscard()
 		}
 	}
-	scribe(Map(("somekey", "somevalue")))()
-	// make sure we're connected
 	val port = wikiaProp("port").toInt
 	val threadCount:Option[Int] = wikiaProp("com.wikia.phalanx.threads") match {
 		case s: String if (s != null && s.nonEmpty) => Some(s.toInt)
