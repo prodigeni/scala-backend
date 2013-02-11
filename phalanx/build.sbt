@@ -1,3 +1,7 @@
+import AssemblyKeys._ // sbt-assembly
+
+assemblySettings
+
 name := "phalanx"
 
 organization := "com.wikia"
@@ -5,8 +9,6 @@ organization := "com.wikia"
 version := "0.5"
 
 scalaVersion := "2.10.0"
-
-seq(com.github.retronym.SbtOneJar.oneJarSettings: _*)
 
 resolvers ++= Seq(
 	"Wikia Maven repository" at "http://pkg-s1.wikia-prod/maven/releases/",
@@ -40,7 +42,13 @@ libraryDependencies ++= Seq(
 
 scalacOptions ++= Seq("-deprecation", "-unchecked")
 
-oneJar ~= { (f)  => {
+artifact in (Compile, assembly) ~= { art =>
+  art.copy(`classifier` = Some("assembly"))
+}
+
+addArtifact(artifact in (Compile, assembly), assembly)
+
+assembly ~= { (f)  => {
   import scala.sys.process._
   Seq("cp", f.getPath, "deploy/phalanx-server.jar").! // runs cp in shell
   f }
