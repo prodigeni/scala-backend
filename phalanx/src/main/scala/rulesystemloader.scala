@@ -13,7 +13,7 @@ object RuleSystemLoader {
 		def pcase = column[Int]("p_case")
 		def exact = column[Int]("p_exact")
 		def regex = column[Int]("p_regex")
-		def author = column[Int]("p_author")
+		def author = column[Int]("p_author_id")
 		def ptype = column[Int]("p_type")
 		def text = column[String]("p_text")
 		def reason = column[String]("p_reason")
