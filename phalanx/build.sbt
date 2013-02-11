@@ -1,7 +1,3 @@
-import AssemblyKeys._ // for sbt-assembly
-
-assemblySettings
-
 name := "phalanx"
 
 organization := "com.wikia"
@@ -9,6 +5,8 @@ organization := "com.wikia"
 version := "0.5"
 
 scalaVersion := "2.10.0"
+
+seq(com.github.retronym.SbtOneJar.oneJarSettings: _*)
 
 resolvers ++= Seq(
 	"Wikia Maven repository" at "http://pkg-s1.wikia-prod/maven/releases/",
@@ -30,7 +28,8 @@ publishTo <<= (version) { version: String =>
 }
 
 libraryDependencies ++= Seq(
-  "com.wikia" %% "wikifactory" % "0.7",
+  "com.wikia" %% "wikifactory" % "0.8",
+  "com.typesafe.slick" %% "slick" % "1.0.0",
   "com.twitter" % "finagle-core_2.10" % "6.1.1",
   "com.twitter" % "finagle-http_2.10" % "6.1.1",
   "org.scalatest" % "scalatest_2.10" % "1.9.1" % "test",
@@ -41,17 +40,7 @@ libraryDependencies ++= Seq(
 
 scalacOptions ++= Seq("-deprecation", "-unchecked")
 
-artifact in (Compile, assembly) ~= { art => art.copy(`classifier` = Some("assembly")) }
-
-addArtifact(artifact in (Compile, assembly), assembly)
-
-// logLevel in Global := Level.Warn
-
-// logLevel in publish := Level.Info
-
-// logLevel in test := Level.Info
-
-assembly ~= { (f)  => {
+oneJar ~= { (f)  => {
   import scala.sys.process._
   Seq("cp", f.getPath, "deploy/phalanx-server.jar").! // runs cp in shell
   f }

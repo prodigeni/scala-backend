@@ -8,14 +8,6 @@
 
 package com.wikia.wikifactory
 
-import collection.JavaConversions._
-import java.sql.{DriverManager, SQLException}
-import org.jooq._
-import org.jooq.impl._
-import org.jooq.impl.Factory._
-import java.text.{ParsePosition, FieldPosition, DateFormat}
-import java.util.{Properties, Date}
-
 object DB {
   val DB_MASTER       : Int = -2
   val DB_SLAVE        : Int = -1
@@ -37,7 +29,6 @@ object DB {
     f
   }
 
-
   def wikiCurrentTime = toWikiTime(new java.util.Date())
   def toWikiTime(date: java.util.Date) = mediaWikiTimeFormat.format(date)
   def fromWikiTime(dateBytes: Array[Byte]):Option[java.util.Date] = {
@@ -57,18 +48,15 @@ object DB {
 
 case class dbException( msg:String ) extends Exception
 
-class DB( var dbType: Int = DB.DB_SLAVE, var dbGroup: String = None.toString(), var dbName: String = DB.EXTERNALSHARED ) {
-  /* mysql driver */
-  private var driverLoaded = false
-
+class DB( var dbType: Int = DB.DB_SLAVE, var dbGroup: Option[String] = None, var dbName: String = DB.EXTERNALSHARED ) {
   /* read DB.yml config */
   private val config = new LBFactoryConf()
 
   /* special section */
-  private var special = if ( DB.DB_SPECIALS.contains( dbName ) ) dbName else ""
+  private val special = if ( DB.DB_SPECIALS.contains( dbName ) ) dbName else ""
 
   /* default parameters to db connect */
-  private var dbTemplate = config.serverTemplate
+  private val dbTemplate = config.serverTemplate
 
   try {
     /* section = special or check if dbName is defined in section */
@@ -104,34 +92,21 @@ class DB( var dbType: Int = DB.DB_SLAVE, var dbGroup: String = None.toString(), 
     case e: Exception => println("exception caught: " + e.getMessage + "\n\nStack:\n" + e.getStackTraceString)
   }
 
-  def connect() : Factory = {
+  def connect(): scala.slick.session.Database = {
     val dbDriver = "com." + dbTemplate.get("type") + ".jdbc.Driver"
-    val dbConn = "jdbc:" + dbTemplate.get("type") + "://" + dbTemplate.get("host") + "/" + dbName;
+    val dbConn = "jdbc:" + dbTemplate.get("type") + "://" + dbTemplate.get("host") + "/" + dbName
 
-    val dialect = dbTemplate.get("type") match {
-      case "mysql" => SQLDialect.MYSQL
-      case "postgresql" => SQLDialect.POSTGRES
-    }
+    val props = new java.util.Properties()
+    props.setProperty( "zeroDateTimeBehavior", "convertToNull" )
+    props.setProperty( "user", dbTemplate.get("user") )
+    props.setProperty( "password", dbTemplate.get("password") )
+    props.setProperty( "autoReconnect", "true")
+    props.setProperty( "characterEncoding", "UTF-8" )
+    props.setProperty( "failOverReadOnly", "false" )
+    props.setProperty( "testOnBorrow", "true" )
+    props.setProperty( "validationQuery", "SELECT 1")
 
-    try {
-      Class.forName( dbDriver )
-
-      var props = new Properties();
-      props.setProperty( "zeroDateTimeBehavior", "convertToNull" );
-      props.setProperty( "user", dbTemplate.get("user") );
-      props.setProperty( "password", dbTemplate.get("password") );
-      props.setProperty( "autoReconnect", "true");
-      props.setProperty( "characterEncoding", "UTF-8" );
-      props.setProperty( "failOverReadOnly", "false" );
-      props.setProperty( "testOnBorrow", "true" );
-      props.setProperty( "validationQuery", "SELECT 1");
-
-      var conn = DriverManager.getConnection( dbConn, props )
-      new Factory(conn, dialect)
-    } catch {
-      case e: SQLException => println("exception caught: " + e.getMessage + "\n\nStack:\n" + e.getStackTraceString)
-      null
-    }
+    scala.slick.session.Database.forURL(dbConn, prop = props, driver = dbDriver)
   }
   // TO DO
   def lightMode() : Boolean = false

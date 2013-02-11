@@ -2,7 +2,7 @@ name := "wikifactory"
 
 organization := "com.wikia"
 
-version := "0.7"
+version := "0.8"
 
 scalaVersion := "2.10.0"
 
@@ -23,13 +23,12 @@ publishTo <<= (version) { version: String =>
 publishArtifact in (Compile, packageDoc) := false
 
 resolvers ++= Seq( 
-	"Wikia Maven repository" at "http://pkg-s1.wikia-prod/maven/releases/",
-	"Sonatype Maven repository" at "https://oss.sonatype.org/content/repositories/snapshots/org/jooq/"
+	"Wikia Maven repository" at "http://pkg-s1.wikia-prod/maven/releases/"
 )
 
 libraryDependencies ++= Seq(
-  "org.jooq" % "jooq" % "2.6.1",
-  "org.yaml" % "snakeyaml" % "1.11", 
+  "org.yaml" % "snakeyaml" % "1.11",
+  "com.typesafe.slick" %% "slick" % "1.0.0",
   "org.scalatest" % "scalatest_2.10" % "1.9.1" % "test",
   "mysql" % "mysql-connector-java" % "5.1.22",
   "org.apache.thrift" % "libthrift" % "0.9.0"

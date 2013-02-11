@@ -252,9 +252,9 @@ object Main extends App {
 	}
 
 	logger.info("Loading rules from database")
-	val db = new DB(DB.DB_MASTER, "", "wikicities").connect()
+	val db = new DB(DB.DB_MASTER, None, "wikicities").connect()
 	val mainService = new MainService(
-		(old, changed) => RuleSystem.reloadSome(db, old, changed.toSet),
+		(old, changed) => RuleSystemLoader.reloadSome(db, old, changed.toSet),
 		new ExceptionLogger(logger) andThen scribe,
 	  threadCount
 	)

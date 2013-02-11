@@ -1,9 +1,9 @@
 package com.wikia
 
+import scala.language.implicitConversions
 import collection.mutable
 
 package object phalanx {
-  implicit def string2Checkable(s:String): Checkable = new Checkable(s)
 	implicit def iterable2Group[A, T <: Iterable[A]](obj: T):RichIterableGroup[A] = new RichIterableGroup(obj)
 	def tryNTimes[T](n: Int, block: => T):Either[Throwable, T] = {
 		try {

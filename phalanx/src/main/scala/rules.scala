@@ -1,13 +1,9 @@
 package com.wikia.phalanx
 
 import collection.mutable
-import com.wikia.phalanx.db.Tables.PHALANX
 import java.util.Date
 import java.util.regex.Pattern
-import org.jooq.tools.unsigned.Unsigned
-import scala.collection.JavaConversions._
 import util.parsing.json.JSONObject
-import com.wikia.phalanx.db.tables.records.PhalanxRecord
 
 class RuleViolation(val rules: Iterable[DatabaseRuleInfo]) extends Exception {
 	def ruleIds = rules.map(rule => rule.dbId)
@@ -225,82 +221,6 @@ class CombinedRuleSystem(initialRules: Iterable[DatabaseRule]) extends FlatRuleS
 	}
 }
 
-object RuleSystem {
-	val logger = NiceLogger("RuleSystemLoader")
-
-	val contentTypes = Map(// bitmask to types
-		(1, "content"), // const TYPE_CONTENT = 1;
-		(2, "summary"), // const TYPE_SUMMARY = 2;
-		(4, "title"), // const TYPE_TITLE = 4;
-		(8, "user"), // const TYPE_USER = 8;
-		(16, "question_title"), // const TYPE_ANSWERS_QUESTION_TITLE = 16;
-		(32, "recent_questions"), // const TYPE_ANSWERS_RECENT_QUESTIONS = 32;
-		(64, "wiki_creation"), // const TYPE_WIKI_CREATION = 64;
-		(128, "cookie"), // const TYPE_COOKIE = 128;
-		(256, "email") // const TYPE_EMAIL = 256;
-	)
-
-	def makeDbInfo(row: PhalanxRecord) = {
-		val lang = row.getPLang
-		val date = row.getPExpire
-
-		new DatabaseRule(new String(row.getPText, "utf-8"), row.getPId.intValue(), new String(row.getPReason, "utf-8"),
-			row.getPCase == 1, row.getPExact == 1, row.getPRegex == 1, if (lang == null || lang.isEmpty) None else Some(lang),
-			com.wikia.wikifactory.DB.fromWikiTime(date),
-			row.getPAuthorId, row.getPType.intValue())
-	}
-	private def ruleBuckets = (for (v <- contentTypes.values) yield (v, collection.mutable.Set.empty[DatabaseRule])).toMap
-	private def dbRows(db: org.jooq.FactoryOperations, condition: Option[org.jooq.Condition]): Seq[PhalanxRecord] = {
-		logger.info("Getting database rows")
-		val rows = tryNTimes(3, {
-			val query = db.selectFrom(PHALANX).where(PHALANX.P_EXPIRE.isNull).or("p_expire > ?", com.wikia.wikifactory.DB.wikiCurrentTime)
-			(condition match {
-				case None => query
-				case Some(x) => query.and(x)
-			}).fetch().toIndexedSeq
-		}) match {
-			case Right(x) => x
-			case Left(e) => throw e
-		}
-		logger.info("Got " + rows + " rows")
-		rows
-	}
-	private def createRules(rows: Seq[PhalanxRecord]) = {
-		val result = ruleBuckets
-		val ids = collection.mutable.Set.empty[Int]
-		for (row: PhalanxRecord <- rows) {
-			try {
-				val rule = makeDbInfo(row)
-				val t = row.getPType.intValue()
-				for ((i: Int, s: String) <- contentTypes) {
-					if ((i & t) != 0) result(s) += rule
-				}
-				ids += rule.dbId
-			}
-			catch {
-				case e: java.util.regex.PatternSyntaxException => None
-				case e: Throwable => throw e
-			}
-		}
-		(result, ids)
-	}
-	def fromDatabase(db: org.jooq.FactoryOperations): Map[String, RuleSystem] = {
-		val (result, _) = createRules(dbRows(db, None))
-		result.transform( (_, rules) => new CombinedRuleSystem(rules))
-	}
-	def reloadSome(db: org.jooq.FactoryOperations, oldMap: Map[String, RuleSystem], changedIds: Set[Int]): Map[String, RuleSystem] = {
-		if (changedIds.isEmpty) {
-			// no info, let's do a full reload
-			fromDatabase(db)
-		} else {
-			val (result, foundIds) = createRules(dbRows(db, Some(PHALANX.P_ID.in(changedIds.map {
-				Unsigned.uint(_)
-			}))))
-			val deletedIds = changedIds.diff(foundIds)
-			oldMap.transform( (key, rs) => rs.reloadRules(result(key), deletedIds))
-		}
-	}
-}
 
 
 
