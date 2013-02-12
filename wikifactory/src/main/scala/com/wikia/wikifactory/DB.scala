@@ -48,9 +48,9 @@ object DB {
 
 case class dbException( msg:String ) extends Exception
 
-class DB( var dbType: Int = DB.DB_SLAVE, var dbGroup: Option[String] = None, var dbName: String = DB.EXTERNALSHARED ) {
+class DB( val dbType: Int = DB.DB_SLAVE, val dbGroup: Option[String] = None, val dbName: String = DB.EXTERNALSHARED,
+          val config: LBFactoryConf = new LBFactoryConf() ) {
   /* read DB.yml config */
-  private val config = new LBFactoryConf()
 
   /* special section */
   private val special = if ( DB.DB_SPECIALS.contains( dbName ) ) dbName else ""

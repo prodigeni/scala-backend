@@ -22,7 +22,7 @@ publishTo <<= (version) { version: String =>
 
 publishArtifact in (Compile, packageDoc) := false
 
-resolvers ++= Seq( 
+resolvers ++= Seq(
 	"Wikia Maven repository" at "http://pkg-s1.wikia-prod/maven/releases/"
 )
 
