@@ -272,7 +272,7 @@ object Main extends App {
 		.sendBufferSize(16*1024)
 		.recvBufferSize(32*1024)
 		.backlog(500)
-		.bindTo(port)
+		.bindTo(new java.net.InetSocketAddress(port))
 
 	val server = config.build(ExceptionFilter andThen NewRelic andThen mainService)
 	logger.info("Server started on port: " + port)
