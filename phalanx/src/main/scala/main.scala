@@ -4,7 +4,6 @@ import com.twitter.concurrent.NamedPoolThreadFactory
 import com.twitter.finagle.builder.ServerBuilder
 import com.twitter.finagle.http.RichHttp
 import com.twitter.finagle.http.filter.ExceptionFilter
-import com.twitter.finagle.http.path._
 import com.twitter.finagle.http.{Http, Request, Status, Version, Response, Message}
 import com.twitter.finagle.util.TimerFromNettyTimer
 import com.twitter.finagle.{SimpleFilter, Service}
@@ -85,10 +84,8 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 			c.set(Calendar.SECOND, 0)
 			c.add(Calendar.MINUTE, 1)
 			nextExpireDate = Some(c.getTime)
-			expireWatchTask = Some(timer.schedule(Time(nextExpireDate.get)) {
-				expire()
-			})
 			logger.trace("Scheduling expire task at " + nextExpireDate.get)
+			expireWatchTask = Some(timer.schedule(Time(nextExpireDate.get))(expire _))
 		}
 	}
 	def expire() {
@@ -143,15 +140,31 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 		)).mkString("\n")
 		response
 	}
+	def stripPath(request: Request): String = {
+		val requestPath = request.path
+		logger.debug(request.remoteHost+" "+requestPath)
+		(if (requestPath.startsWith("http://")) {
+			val afterPrefix = requestPath.substring("http://".length)
+			afterPrefix.indexOf('/') match {
+				case -1 => ""
+				case x:Int => afterPrefix.substring(x+1)
+			}
+		} else {
+			requestPath.stripPrefix("/")
+		}).stripSuffix("/") // get rid of '/' at the end too
+	}
 	def apply(request: Request): Future[Response] = {
-		Path(request.path) match {
-			case Root => Future(Respond("PHALANX ALIVE"))
-			case Root / "check" => futurePool(ParsedRequest(request).checkResponse)
-			case Root / "match" => futurePool(ParsedRequest(request).matchResponse)
-			case Root / "validate" => futurePool(validateRegex(request))
-			case Root / "reload" => futurePool(reload(request))
-			case Root / "stats" => futurePool(stats(request))
-			case _ => Future(Respond.error("not found", Status.NotFound))
+		stripPath(request) match {
+			case "" => Future(Respond("PHALANX ALIVE"))
+			case "match" => futurePool(ParsedRequest(request).matchResponse)
+			case "check" => futurePool(ParsedRequest(request).checkResponse)
+			case "validate" => futurePool(validateRegex(request))
+			case "reload" => futurePool(reload(request))
+			case "stats" => futurePool(stats(request))
+			case x => {
+				logger.warn("Unknown request path: " + request.path + " [ " + x.toString + " ] ")
+				Future(Respond.error("not found", Status.NotFound))
+			}
 		}
 	}
 
@@ -273,6 +286,8 @@ object Main extends App {
 		.recvBufferSize(32*1024)
 		.backlog(500)
 		.bindTo(new java.net.InetSocketAddress(port))
+
+	logger.info("Preloaded "+PackagePreloader(this.getClass, Seq("com.wikia.phalanx", "com.twitter.finagle.http")).size+" classes")
 
 	val server = config.build(ExceptionFilter andThen NewRelic andThen mainService)
 	logger.info("Server started on port: " + port)

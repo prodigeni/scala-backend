@@ -109,7 +109,7 @@ class ServiceTests extends FlatSpec {
 	}
 
 	it should "provide stats" in {
-		val request = RequestBuilder().url(address + "status").buildGet()
+		val request = RequestBuilder().url(address + "stats").buildGet()
 		val response = client(request)()
 		val content = response.getContent.toString(charset)
 		assert(content != "failure\n")
