@@ -6,7 +6,7 @@ name := "phalanx"
 
 organization := "com.wikia"
 
-version := "0.7.2"
+version := "0.9"
 
 scalaVersion := "2.10.0"
 
@@ -30,7 +30,7 @@ publishTo <<= (version) { version: String =>
 }
 
 libraryDependencies ++= Seq(
-  "com.wikia" %% "wikifactory" % "0.8",
+  "com.wikia" %% "wikifactory" % "0.9",
   "com.typesafe.slick" %% "slick" % "1.0.0",
   "com.twitter" % "finagle-core_2.10" % "6.1.1",
   "com.twitter" % "finagle-http_2.10" % "6.1.1",

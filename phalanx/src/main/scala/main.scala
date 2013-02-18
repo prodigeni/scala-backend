@@ -270,10 +270,13 @@ object Main extends App {
 		case _ => None
 	}
 
+
+	val database = new DB(DB.DB_MASTER, None, "wikicities")
+	logger.info("Connecting to database from configuration file "+database.config.sourcePath)
+	val dbSession = database.connect()
 	logger.info("Loading rules from database")
-	val db = new DB(DB.DB_MASTER, None, "wikicities").connect()
 	val mainService = new MainService(
-		(old, changed) => RuleSystemLoader.reloadSome(db, old, changed.toSet),
+		(old, changed) => RuleSystemLoader.reloadSome(dbSession, old, changed.toSet),
 		new ExceptionLogger(logger) andThen scribe,
 	  threadCount
 	)

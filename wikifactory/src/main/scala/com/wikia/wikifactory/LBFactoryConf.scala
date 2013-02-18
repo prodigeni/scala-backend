@@ -15,7 +15,7 @@ import scala.collection.JavaConverters._
 import org.yaml.snakeyaml._
 import scala.util.Random
 
-class LBFactoryConf(sourcePath: String) {
+class LBFactoryConf(val sourcePath: String) {
   val yamlData = (new Yaml).load(fromFile(sourcePath).mkString).asInstanceOf[java.util.ArrayList[_]]
   val section = yamlData.get(0).asInstanceOf[TWHashMapStr[AnyRef]]
 
