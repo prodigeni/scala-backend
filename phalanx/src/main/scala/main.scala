@@ -290,7 +290,12 @@ object Main extends App {
 		.backlog(500)
 		.bindTo(new java.net.InetSocketAddress(port))
 
-	logger.info("Preloaded "+PackagePreloader(this.getClass, Seq("com.wikia.phalanx", "com.twitter.finagle.http")).size+" classes")
+	val preloaded = PackagePreloader(this.getClass, Seq(
+		"com.wikia.phalanx",
+		"com.twitter.finagle.http",
+		"com.twitter.util"
+	))
+	logger.info("Preloaded "+preloaded.size+" classes")
 
 	val server = config.build(ExceptionFilter andThen NewRelic andThen mainService)
 	logger.info("Server started on port: " + port)
