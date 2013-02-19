@@ -6,7 +6,7 @@ name := "phalanx"
 
 organization := "com.wikia"
 
-version := "0.9"
+version := "0.10"
 
 scalaVersion := "2.10.0"
 

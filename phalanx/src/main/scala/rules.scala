@@ -197,9 +197,12 @@ class CombinedRuleSystem(initialRules: Iterable[DatabaseRule]) extends FlatRuleS
 	override def isMatch(s: Checkable): Boolean = {
 		val selected = checkers(None) ++ checkers(Some(s.language))
 		val result = selected.exists (x => x.isMatch(s))
+		logger.debug(s"isMatch result for $s: $result")
 		result
 	}
-	override def allMatches(s: Checkable): Iterable[DatabaseRuleInfo] = if (isMatch(s)) ruleStream flatMap (x => x.allMatches(s)) else Seq.empty[DatabaseRuleInfo]
+	override def allMatches(s: Checkable): Iterable[DatabaseRuleInfo] = {
+		if (isMatch(s)) ruleStream flatMap (x => x.allMatches(s)) else Seq.empty[DatabaseRuleInfo]
+	}
 	override def combineRules: CombinedRuleSystem = this
 	override def ruleStats: Iterable[String] = {
 		val types = new mutable.HashMap[String, Set[Checker]]().withDefaultValue(Set.empty[Checker])

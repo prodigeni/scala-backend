@@ -142,7 +142,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 	}
 	def stripPath(request: Request): String = {
 		val requestPath = request.path
-		logger.debug(request.remoteHost+" "+requestPath)
+		logger.debug(s"${request.remoteHost} $requestPath ${request.params}")
 		(if (requestPath.startsWith("http://")) {
 			val afterPrefix = requestPath.substring("http://".length)
 			afterPrefix.indexOf('/') match {
@@ -183,16 +183,18 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 			}
 		val combinations:Iterable[(RuleSystem, Checkable)] = (for (r <- ruleSystems; c <- content) yield (r, c))
 
-		def findMatches(limit: Int):Iterable[DatabaseRuleInfo] = {
+		def findMatches(limit: Int):Seq[DatabaseRuleInfo] = {
 			val matches = combinations.view.flatMap( (pair: (RuleSystem, Checkable)) => pair._1.allMatches(pair._2) )
 			val result:Iterable[DatabaseRuleInfo] = (if (limit > 0) matches.take(limit).force else matches.force)
 			result.headOption.map(sendToScribe(_))
-			result
+			result.toSeq
 		}
 		def checkResponse = {
 			if (ruleSystems.isEmpty) Respond.unknownType else
 				if (content.isEmpty) Respond.contentMissing else {
-					if (findMatches(1).isEmpty) Respond.ok else Respond.failure
+				val matches = findMatches(1)
+				logger.debug(s"check: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
+				if (matches.isEmpty) Respond.ok else Respond.failure
 				}
 		}
 		def matchResponse = {
@@ -200,6 +202,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 				if (content.isEmpty) Respond.contentMissing else {
 					val limit = request.params.getIntOrElse("limit", 1)
 					val matches = findMatches(limit)
+				  logger.debug(s"match: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
 					Respond.json(matches)
 				}
 		}
