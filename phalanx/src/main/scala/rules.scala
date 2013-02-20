@@ -134,7 +134,7 @@ trait RuleSystem extends Rule {
 	def combineRules: RuleSystem
 	def reloadRules(added: Iterable[DatabaseRule], deletedIds: Set[Int]): RuleSystem
 	def stats: Iterable[String]
-	def rules: Iterable[Rule]
+	def rules: Iterable[DatabaseRule]
 	def expiring: IndexedSeq[DatabaseRuleInfo]
 }
 

@@ -53,15 +53,18 @@ object RuleSystemLoader {
 	private def dbRows(db: Database, ids: Option[Set[Int]]): Seq[PhalanxRecord] = {
 		logger.info("Getting database rows")
 		val rows = tryNTimes(3, {
-			db.withTransaction({
+			db.withSession({
 				implicit session: Session =>
-					val current = com.wikia.wikifactory.DB.wikiCurrentTime
-					val query = Query(PhalanxTable).filter(x => x.expire.isNull || x.expire.>(current))
-					val query2 = ids match {
-						case None => query
-						case Some(s) => query.filter(x => x.id.inSet(s))
+					db.withTransaction {
+						val current = com.wikia.wikifactory.DB.wikiCurrentTime
+						val query = Query(PhalanxTable).filter(x => x.expire.isNull || x.expire.>(current))
+						val query2 = ids match {
+							case None => query
+							case Some(s) => query.filter(x => x.id.inSet(s))
+						}
+						logger.debug(s"Issuing query with session=$session")
+						query2.list
 					}
-					query2.list
 			})
 		}) match {
 			case Left(e: Throwable) => throw e
@@ -100,6 +103,7 @@ object RuleSystemLoader {
 			fromDatabase(db)
 		} else {
 			val rows = dbRows(db, Some(changedIds))
+			logger.trace(s"Rows for reload: \n $rows")
 			val (result, foundIds) = createRules(rows)
 			val deletedIds = changedIds.diff(foundIds)
 			logger.debug(s"reloadSome: new/changed rules: $result")

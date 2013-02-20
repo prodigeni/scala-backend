@@ -6,7 +6,13 @@ name := "phalanx"
 
 organization := "com.wikia"
 
-version := "0.10"
+version := "0.12"
+
+version ~= { (s) => {
+  import scala.sys.process._
+  val result = Seq("git", "rev-list", "--max-count=1" , "HEAD").!!.stripLineEnd // runs git in shell
+  if (result.size == 40)  s + "." + result else s
+} }
 
 scalaVersion := "2.10.0"
 
@@ -53,3 +59,11 @@ assembly ~= { (f)  => {
   Seq("cp", f.getPath, "deploy/phalanx-server.jar").! // runs cp in shell
   f }
 }
+
+seq(ReflectPlugin.allSettings:_*)
+
+reflectPackage	:= "com.wikia.phalanx"
+
+reflectClass	:= "PhalanxVersion"
+
+sourceGenerators in Compile <+= reflect map identity

@@ -16,8 +16,7 @@ import org.jboss.netty.handler.codec.http.HttpResponseStatus
 import org.jboss.netty.util.HashedWheelTimer
 import scala.Some
 import scala.collection.JavaConversions._
-import util.parsing.json.JSONArray
-import util.parsing.json.JSONFormat
+import util.parsing.json.{JSONObject, JSONArray, JSONFormat}
 import java.util.concurrent.TimeUnit
 
 class ExceptionLogger[Req, Rep](val logger: NiceLogger) extends SimpleFilter[Req, Rep] {
@@ -40,6 +39,11 @@ object Respond {
 		val jsonData = JSONArray(data.toList.map(x => x.toJSONObject))
 		Respond(jsonData.toString(JSONFormat.defaultFormatter), Status.Ok, Message.ContentTypeJson)
 	}
+	def json(data: Map[String, DatabaseRuleInfo]) = {
+		val jsonData = JSONObject(data.mapValues( x => x.toJSONObject))
+		Respond(jsonData.toString(JSONFormat.defaultFormatter), Status.Ok, Message.ContentTypeJson)
+	}
+
 	def error(info: String, status: HttpResponseStatus = Status.InternalServerError) = Respond(info + "\n", status)
 	val ok = Respond("ok\n")
 	val failure = Respond("failure\n")
@@ -119,12 +123,12 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 		if (bytes < unit) bytes + " B" else {
 			val exp = (scala.math.log(bytes) / scala.math.log(unit)).toInt
 			val pre = "KMGTPE".charAt(exp - 1) + "iB"
-			"%.1f %s".format(bytes / scala.math.pow(unit, exp), pre)
+			f"${bytes / scala.math.pow(unit, exp)}%.1f $pre"
 		}
 	}
 	def stats(request: Request): Response = Respond(statsString)
 	def statsString: String = {
-		val response = (rules.toSeq.map(t => {
+		val response =  (rules.toSeq.map(t => {
 			val (s, ruleSystem) = t
 			s + ":\n" + (ruleSystem.stats.map {
 				"  " + _
@@ -132,6 +136,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 		}) ++ nextExpireDate.map("Next rule expire date: " + _.toString)
 			++ sys.props.get("newrelic.environment").map("NewRelic environment: "+_)
 			++ Seq(
+		  Main.versionString,
 		  "Worker threads: " + threadPoolSize,
 			"Max memory: " + humanReadableByteCount(sys.runtime.maxMemory()),
 		  "Free memory: " + humanReadableByteCount(sys.runtime.freeMemory()),
@@ -139,6 +144,13 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 		  ""
 		)).mkString("\n")
 		response
+	}
+	def viewRule(request: Request) : Response = {
+		val id = request.params.getInt("id").get
+		val found = rules.mapValues( rs => {	rs.rules.find( r => r.dbId == id) }).collect( x => x match {
+			case (s:String, Some(rule:DatabaseRuleInfo)) => (s, rule)
+		})
+		Respond.json(found)
 	}
 	def stripPath(request: Request): String = {
 		val requestPath = request.path
@@ -161,6 +173,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 			case "validate" => futurePool(validateRegex(request))
 			case "reload" => futurePool(reload(request))
 			case "stats" => futurePool(stats(request))
+			case "view" => futurePool(viewRule(request))
 			case x => {
 				logger.warn("Unknown request path: " + request.path + " [ " + x.toString + " ] ")
 				Future(Respond.error("not found", Status.NotFound))
@@ -170,7 +183,11 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 
 	case class ParsedRequest(request: Request) {
 		val params = request.params
-		val lang = params.getOrElse("lang", "en")
+		val lang = params.get("lang") match {
+			case None => "en"
+			case Some("") => "en"
+			case Some(x) => x
+		}
 		val content = params.getAll("content").map(s => Checkable(s, lang))
 		val user = params.get("user")
 		val wiki = params.get("wiki").map(_.toInt)
@@ -257,7 +274,8 @@ object Main extends App {
 	}
 
 	val logger = NiceLogger("Main")
-	logger.trace("Properties loaded from "+cfName)
+	val versionString = s"Phalanx server version ${PhalanxVersion.version}"
+	logger.info(s"$versionString starting, properties loaded from $cfName")
 	val scribe = {
 		val scribetype = wikiaProp("scribe")
 		logger.info("Creating scribe client (" + scribetype + ")")
@@ -267,12 +285,12 @@ object Main extends App {
 			case "discard" => new ScribeDiscard()
 		}
 	}
+
 	val port = wikiaProp("port").toInt
 	val threadCount:Option[Int] = wikiaProp("com.wikia.phalanx.threads") match {
 		case s: String if (s != null && s.nonEmpty) => Some(s.toInt)
 		case _ => None
 	}
-
 
 	val database = new DB(DB.DB_MASTER, None, "wikicities")
 	logger.info("Connecting to database from configuration file "+database.config.sourcePath)
@@ -301,7 +319,7 @@ object Main extends App {
 	logger.info("Preloaded "+preloaded.size+" classes")
 
 	val server = config.build(ExceptionFilter andThen NewRelic andThen mainService)
-	logger.info("Server started on port: " + port)
+	logger.info(s"Listening on port: $port")
 	logger.trace("Initial stats: \n" + mainService.statsString)
 
 	sys.addShutdownHook {

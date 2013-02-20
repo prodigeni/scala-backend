@@ -165,3 +165,15 @@ Example:
       Case insensitive (All langugages) : exact set of 36 phrases, regex (15758 characters)
       Case insensitive (de) : regex (8820 characters)
       Case sensitive (All langugages) : exact set of 4 phrases, regex (80 characters)
+
+### /view
+Checks current information about a rule. Id must be passed with id parameter.
+Result will be JSON with rule information.
+Useful for debugging issues with reloading and matching.
+
+Examples:
+
+```
+$ curl --silent "http://localhost:8080/view?id=100"
+{"user" : {"regex" : true, "expires" : "", "text" : "Josh Gray", "reason" : "vandalism on swfanon", "exact" : false, "caseSensitive" : false, "id" : 100, "language" : "", "authorId" : 8245, "type" : 8}}
+```
