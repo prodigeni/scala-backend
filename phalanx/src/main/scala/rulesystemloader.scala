@@ -68,7 +68,6 @@ object RuleSystemLoader {
 			case Right(x) => x.toIndexedSeq
 		}
 		logger.info("Got " + rows.length + " rows")
-		logger.debug(s"Rows: $rows\n")
 		rows
 	}
 	private def createRules(rows: Seq[PhalanxRecord]) = {
@@ -100,8 +99,11 @@ object RuleSystemLoader {
 			// no info, let's do a full reload
 			fromDatabase(db)
 		} else {
-			val rows = dbRows(db, Some(changedIds))
-			logger.trace(s"Rows for reload: \n $rows")
+			val rows1 = dbRows(db, Some(changedIds))
+			logger.debug(s"Rows1 for reload: \n $rows1")
+			val rows2 = dbRows(db, Some(changedIds))
+			logger.debug(s"Rows2 for reload: \n $rows2")
+			val rows = rows2
 			val (result, foundIds) = createRules(rows)
 			val deletedIds = changedIds.diff(foundIds)
 			logger.debug(s"reloadSome: new/changed rules: $result")
