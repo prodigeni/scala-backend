@@ -128,6 +128,7 @@ case class DatabaseRule(text: String, dbId: Int, reason: String, caseSensitive: 
 	}
 	def allMatches(s: Checkable): Iterable[DatabaseRuleInfo] = if (isMatch(s)) Some(this) else None
 	def isMatch(s: Checkable): Boolean = (this.language.isEmpty || s.language == this.language.get) && checker.isMatch(s)
+	assert(language.isEmpty || language.get != "")
 }
 
 trait RuleSystem extends Rule {

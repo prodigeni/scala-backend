@@ -1,12 +1,9 @@
 package com.wikia.phalanx
 
-import scala.Some
 import scala.slick.driver.MySQLDriver.simple._
 
 object RuleSystemLoader {
-	case class PhalanxRecord(id: Int, pcase: Int, exact: Int,regex: Int, author: Int, ptype: Int, text: String,
-	                         reason: String, expire: Option[String], lang: Option[String]) {
-	}
+	case class PhalanxRecord(id: Int, pcase: Int, exact: Int,regex: Int, author: Int, ptype: Int, text: String,  reason: String, expire: Option[String], lang: Option[String]) { }
 
 	object PhalanxTable extends Table[PhalanxRecord]("phalanx") {
 		def id = column[Int]("p_id", O.PrimaryKey)
@@ -71,6 +68,7 @@ object RuleSystemLoader {
 			case Right(x) => x.toIndexedSeq
 		}
 		logger.info("Got " + rows.length + " rows")
+		logger.debug(s"Rows: $rows\n")
 		rows
 	}
 	private def createRules(rows: Seq[PhalanxRecord]) = {

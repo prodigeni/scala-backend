@@ -147,7 +147,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 	}
 	def viewRule(request: Request) : Response = {
 		val id = request.params.getInt("id").get
-		val found = rules.mapValues( rs => {	rs.rules.find( r => r.dbId == id) }).collect( x => x match {
+		val found:Map[String,DatabaseRuleInfo] = rules.mapValues( rs => {	rs.rules.find( r => r.dbId == id) }).collect( x => x match {
 			case (s:String, Some(rule:DatabaseRuleInfo)) => (s, rule)
 		})
 		Respond.json(found)
