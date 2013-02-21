@@ -275,7 +275,7 @@ object Main extends App {
 
 	val logger = NiceLogger("Main")
 	val versionString = s"Phalanx server version ${PhalanxVersion.version}"
-	logger.info(s"$versionString starting, properties loaded from $cfName")
+	logger.info(s"$versionString starting, properties loaded from ${cfName.get}")
 	val scribe = {
 		val scribetype = wikiaProp("scribe")
 		logger.info("Creating scribe client (" + scribetype + ")")
