@@ -99,11 +99,8 @@ object RuleSystemLoader {
 			// no info, let's do a full reload
 			fromDatabase(db)
 		} else {
-			val rows1 = dbRows(db, Some(changedIds))
-			logger.debug(s"Rows1 for reload: \n $rows1")
-			val rows2 = dbRows(db, Some(changedIds))
-			logger.debug(s"Rows2 for reload: \n $rows2")
-			val rows = rows2
+			val rows = dbRows(db, Some(changedIds))
+			logger.debug(s"Rows1 for reload: \n $rows")
 			val (result, foundIds) = createRules(rows)
 			val deletedIds = changedIds.diff(foundIds)
 			logger.debug(s"reloadSome: new/changed rules: $result")
