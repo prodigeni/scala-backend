@@ -26,6 +26,8 @@ class RuleTests extends FlatSpec {
 	}
 	val testRule = new DatabaseRule(text = "Szumo ma kota5", dbId = 53718, reason = "", caseSensitive = false, exact = false, regex = false,
 		language = None, authorId = 5428556, typeMask = 5, expires = None )
+	val replacementRule = new DatabaseRule(text = "Szumo ma kota6", dbId = 53718, reason = "", caseSensitive = false, exact = false, regex = false,
+		language = None, authorId = 5428556, typeMask = 5, expires = None )
 	val orig = new FlatRuleSystem(List(Rule.exact("lamb"), Rule.contains("Mary"), Rule.contains("scheisse", false, Some("de")), testRule))
 	def checkSystem(rule: RuleSystem) {
 		rule.check(Checkable("wolf"))
@@ -48,6 +50,13 @@ class RuleTests extends FlatSpec {
 			rule.check(Checkable("Szumo ma kota5", "en"))
 		}
 		assert(rule.allMatches(Checkable("Szumo ma kota5", "en")).toSet === Set(testRule))
+		val newRs = rule.reloadRules(Seq(replacementRule), Seq.empty)
+		newRs.check(Checkable("Szumo ma kota5", "en"))
+		intercept[RuleViolation] {
+			newRs.check(Checkable("Szumo ma kota6", "en"))
+		}
+		assert(newRs.allMatches(Checkable("Szumo ma kota5", "en")).toSet === Set.empty)
+		assert(newRs.allMatches(Checkable("Szumo ma kota6", "en")).toSet === Set(replacementRule))
 	}
 
 	"RuleSystem" should "work flat" in {

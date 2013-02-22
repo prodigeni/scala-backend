@@ -135,7 +135,7 @@ case class DatabaseRule(text: String, dbId: Int, reason: String, caseSensitive: 
 
 trait RuleSystem extends Rule {
 	def combineRules: RuleSystem
-	def reloadRules(added: Iterable[DatabaseRule], deletedIds: Set[Int]): RuleSystem
+	def reloadRules(added: Iterable[DatabaseRule], deletedIds: Iterable[Int]): RuleSystem
 	def stats: Iterable[String]
 	def rules: Iterable[DatabaseRule]
 	def expiring: IndexedSeq[DatabaseRuleInfo]
@@ -151,8 +151,9 @@ class FlatRuleSystem(initialRules: Iterable[DatabaseRule]) extends RuleSystem {
 	def allMatches(s: Checkable) = ruleStream.flatMap((x: DatabaseRule) => x.allMatches(s))
 	def combineRules: CombinedRuleSystem = new CombinedRuleSystem(initialRules)
 	def copy(rules: Iterable[DatabaseRule]): RuleSystem = new FlatRuleSystem(rules)
-	def reloadRules(added: Iterable[DatabaseRule], deletedIds: Set[Int]): RuleSystem = {
-		val remaining = rules.filterNot(rule => deletedIds.contains(rule.dbId)).seq
+	def reloadRules(added: Iterable[DatabaseRule], deletedIds: Iterable[Int]): RuleSystem = {
+		val changed = deletedIds.toSet ++ added.map(r => r.dbId)
+		val remaining = rules.filterNot(rule => changed.contains(rule.dbId)).seq
 		if (added.isEmpty && remaining.size == rules.size) this else copy(remaining ++ added)
 	}
 	protected def statsSummary(c: Checker): String = c.description(long = false)

@@ -118,4 +118,5 @@ class ServiceTests extends FlatSpec {
 	it should "shutdown on demand" in {
 		server.close()
 	}
+
 }
