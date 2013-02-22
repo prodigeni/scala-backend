@@ -106,6 +106,12 @@ class ServiceTests extends FlatSpec {
 			val content = response.getContent.toString(charset)
 			assert(content === "failure\n")
 		}
+		checkScribe {
+			val request = RequestBuilder().url(address + "match?user=ala&wiki=1&type=tests&content=fuck&content=ok&content=something").buildGet()
+			val response = client(request)()
+			val content = response.getContent.toString(charset)
+			assert(content === "[{\"regex\" : true, \"expires\" : \"\", \"text\" : \"^fuck\", \"reason\" : \"\", \"exact\" : false, \"caseSensitive\" : false, \"id\" : 589, \"language\" : \"\", \"authorId\" : 0, \"type\" : 8}]")
+		}
 	}
 
 	it should "provide stats" in {

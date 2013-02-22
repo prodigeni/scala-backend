@@ -39,14 +39,14 @@ abstract sealed class Checker {
 
 case class ExactChecker(caseType: CaseType, text: String) extends Checker {
 	def isMatch(s: Checkable): Boolean = caseType(s) == text
-	def regexPattern = "^" + java.util.regex.Pattern.quote(text) + "$"
+	def regexPattern = "(" + java.util.regex.Pattern.quote(text) + ")"
 	override def toString = s"ExactChecker($caseType,$text)"
 	def description(long: Boolean = false): String = "exact phrase"
 }
 
 case class ContainsChecker(caseType: CaseType, text: String) extends Checker {
 	def isMatch(s: Checkable): Boolean = caseType(s).contains(text)
-	def regexPattern = java.util.regex.Pattern.quote(text)
+	def regexPattern = ".*" + java.util.regex.Pattern.quote(text) + ".*"
 	override def toString = s"ContainsChecker($caseType,$text)"
 	def description(long: Boolean = false): String = "contains"
 }
@@ -55,7 +55,7 @@ case class RegexChecker(caseType: CaseType, text: String) extends Checker {
 	val regex = Pattern.compile(text, if (caseType == CaseInsensitive) Pattern.UNICODE_CASE | Pattern.CASE_INSENSITIVE else 0)
 	def isMatch(s: Checkable): Boolean = regex.matcher(s.text).find()
 	// extract not required
-	def regexPattern = text
+	def regexPattern = "("+text+")"
 	override def toString = s"RegexChecker($caseType,$text)"
 	def description(long: Boolean = false): String = if (long) "regex (" + text.length + " characters)" else "regex"
 }
@@ -185,8 +185,8 @@ class CombinedRuleSystem(initialRules: Iterable[DatabaseRule]) extends FlatRuleS
 		// using those functions as keys in the map "sets"
 		val exactCs: func = texts => new SetExactChecker(CaseSensitive, texts.map(rule => rule.text))
 		val exactCi: func = texts => new SetExactChecker(CaseInsensitive, texts.map(rule => rule.text))
-		val cs: func = texts => new RegexChecker(CaseSensitive, texts.map(rule => rule.checker.regexPattern).mkString("|"))
-		val ci: func = texts => new RegexChecker(CaseInsensitive, texts.map(rule => rule.checker.regexPattern).mkString("|"))
+		val cs: func = texts => new RegexChecker(CaseSensitive, "^"+texts.map(rule => rule.checker.regexPattern).mkString("|")+"$")
+		val ci: func = texts => new RegexChecker(CaseInsensitive, "^"+texts.map(rule => rule.checker.regexPattern).mkString("|")+"$")
 		val groupedByLang = initialRules.groupBy(rule => rule.language)
 		def splitCase(rs: Iterable[DatabaseRule]) = {
 			rs.groupBy(rule => rule.checker match {
