@@ -3,7 +3,11 @@ package com.wikia.phalanx
 import scala.slick.driver.MySQLDriver.simple._
 
 object RuleSystemLoader {
-	case class PhalanxRecord(id: Int, pcase: Int, exact: Int,regex: Int, author: Int, ptype: Int, text: String,  reason: String, expire: Option[String], lang: Option[String]) { }
+	case class PhalanxRecord(id: Int, pcase: Int, exact: Int,regex: Int, author: Int, ptype: Int, textBlob: Array[Byte],
+	                         reasonBlob: Array[Byte], expire: Option[String], lang: Option[String])	{
+		def text = new String(textBlob, "UTF-8")
+		def reason = new String(reasonBlob, "UTF-8")
+	}
 
 	object PhalanxTable extends Table[PhalanxRecord]("phalanx") {
 		def id = column[Int]("p_id", O.PrimaryKey)
@@ -12,8 +16,8 @@ object RuleSystemLoader {
 		def regex = column[Int]("p_regex")
 		def author = column[Int]("p_author_id")
 		def ptype = column[Int]("p_type")
-		def text = column[String]("p_text")
-		def reason = column[String]("p_reason")
+		def text = column[Array[Byte]]("p_text")
+		def reason = column[Array[Byte]]("p_reason")
 		def expire = column[Option[String]]("p_expire")
 		def lang = column[Option[String]]("p_lang")
 		// Every table needs a * projection with the same type as the table's type parameter

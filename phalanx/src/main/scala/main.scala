@@ -147,10 +147,19 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 	}
 	def viewRule(request: Request) : Response = {
 		val id = request.params.getInt("id").get
-		val found:Map[String,DatabaseRuleInfo] = rules.mapValues( rs => {	rs.rules.find( r => r.dbId == id) }).collect( x => x match {
+
+		/*val foundMap:Map[String,DatabaseRuleInfo] = rules.mapValues( rs => {	rs.rules.find( r => r.dbId == id) }).collect( x => x match {
 			case (s:String, Some(rule:DatabaseRuleInfo)) => (s, rule)
-		})
-		Respond.json(found)
+		}) */
+		val foundMap = rules.toSeq.map( p => {
+			val (typeName:String, ruleSystem:RuleSystem) = p
+			ruleSystem.rules.find( r => r.dbId == id) match {
+				case Some(rule) => Seq( (typeName, rule) )
+				case None => Seq.empty
+			}
+		}).flatten.toMap
+		logger.debug(s"found rules: $foundMap")
+		Respond.json(foundMap)
 	}
 	def stripPath(request: Request): String = {
 		val requestPath = request.path
