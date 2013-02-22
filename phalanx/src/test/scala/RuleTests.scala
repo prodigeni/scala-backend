@@ -11,7 +11,7 @@ class RuleTests extends FlatSpec {
 		intercept[RuleViolation] {
 			rule.check(Checkable("Something"))
 		}
-		assert(rule.allMatches(Checkable("Something")) === List(rule))
+		assert(rule.allMatches(Checkable("Something")).toSet === Set(rule))
 	}
 
 	it should "match contains" in {
@@ -28,7 +28,7 @@ class RuleTests extends FlatSpec {
 		language = None, authorId = 5428556, typeMask = 5, expires = None )
 	val replacementRule = new DatabaseRule(text = "Szumo ma kota6", dbId = 53718, reason = "", caseSensitive = false, exact = false, regex = false,
 		language = None, authorId = 5428556, typeMask = 5, expires = None )
-	val orig = new FlatRuleSystem(List(Rule.exact("lamb"), Rule.contains("Mary"), Rule.contains("scheisse", false, Some("de")), testRule))
+	val orig = new FlatRuleSystem(List(Rule.exact("Something"), Rule.exact("lamb"), Rule.contains("Mary"), Rule.contains("scheisse", false, Some("de")), testRule))
 	def checkSystem(rule: RuleSystem) {
 		rule.check(Checkable("wolf"))
 		intercept[RuleViolation] {
@@ -38,6 +38,8 @@ class RuleTests extends FlatSpec {
 			rule.check(Checkable("Mary has a wolf"))
 		}
 		assert(rule.allMatches(Checkable("Mary has a lamb")).toSet === Set(Rule.contains("Mary")))
+		assert(rule.allMatches(Checkable("Something")).toSet === Set(Rule.exact("Something")))
+
 		intercept[RuleViolation] {
 			rule.check(Checkable("lamb"))
 		}

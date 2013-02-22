@@ -61,7 +61,7 @@ case class RegexChecker(caseType: CaseType, text: String) extends Checker {
 }
 
 case class SetExactChecker(caseType: CaseType, origTexts: Iterable[String]) extends Checker {
-	val texts = if (caseType == CaseInsensitive) origTexts.toSet else origTexts.map(s => s.toLowerCase).toSet
+	val texts = if (caseType == CaseSensitive) origTexts.toSet else origTexts.map(s => s.toLowerCase).toSet
 	def isMatch(s: Checkable): Boolean = texts.contains(caseType(s))
 	def regexPattern = texts.map(java.util.regex.Pattern.quote).mkString("|")
 	override def toString = "SetExactChecker(" + texts.size + ")"
