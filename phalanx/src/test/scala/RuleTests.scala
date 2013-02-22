@@ -24,7 +24,9 @@ class RuleTests extends FlatSpec {
 			rule.check(Checkable("Other Something or else"))
 		}
 	}
-	val orig = new FlatRuleSystem(List(Rule.exact("lamb"), Rule.contains("Mary"), Rule.contains("scheisse", false, Some("de"))))
+	val testRule = new DatabaseRule(text = "Szumo ma kota5", dbId = 53718, reason = "", caseSensitive = false, exact = false, regex = false,
+		language = None, authorId = 5428556, typeMask = 5, expires = None )
+	val orig = new FlatRuleSystem(List(Rule.exact("lamb"), Rule.contains("Mary"), Rule.contains("scheisse", false, Some("de")), testRule))
 	def checkSystem(rule: RuleSystem) {
 		rule.check(Checkable("wolf"))
 		intercept[RuleViolation] {
@@ -42,6 +44,10 @@ class RuleTests extends FlatSpec {
 		intercept[RuleViolation] {
 			rule.check(Checkable("scheisse in german shouldn't", "de"))
 		}
+		intercept[RuleViolation] {
+			rule.check(Checkable("Szumo ma kota5", "en"))
+		}
+		assert(rule.allMatches(Checkable("Szumo ma kota5", "en")).toSet === Set(testRule))
 	}
 
 	"RuleSystem" should "work flat" in {
@@ -50,6 +56,5 @@ class RuleTests extends FlatSpec {
 	it should "work combined" in {
 		checkSystem(orig.combineRules)
 	}
-
 }
 

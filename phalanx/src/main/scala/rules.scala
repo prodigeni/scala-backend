@@ -21,11 +21,13 @@ trait CaseType {
 object CaseSensitive extends CaseType {
 	def apply(s: Checkable) = s.text
 	def apply(s: String) = s
+	override def toString = "CS"
 }
 
 object CaseInsensitive extends CaseType {
 	def apply(s: Checkable) = s.lcText
 	def apply(s: String) = s.toLowerCase
+	override def toString = "CI"
 }
 
 abstract sealed class Checker {
@@ -38,23 +40,23 @@ abstract sealed class Checker {
 case class ExactChecker(caseType: CaseType, text: String) extends Checker {
 	def isMatch(s: Checkable): Boolean = caseType(s) == text
 	def regexPattern = "^" + java.util.regex.Pattern.quote(text) + "$"
-	override def toString = "ExactChecker(" + text + ")"
+	override def toString = s"ExactChecker($caseType,$text)"
 	def description(long: Boolean = false): String = "exact phrase"
 }
 
 case class ContainsChecker(caseType: CaseType, text: String) extends Checker {
 	def isMatch(s: Checkable): Boolean = caseType(s).contains(text)
 	def regexPattern = java.util.regex.Pattern.quote(text)
-	override def toString = "ContainsChecker(" + text + ")"
+	override def toString = s"ContainsChecker($caseType,$text)"
 	def description(long: Boolean = false): String = "contains"
 }
 
 case class RegexChecker(caseType: CaseType, text: String) extends Checker {
-	val regex = Pattern.compile(text, if (caseType == CaseSensitive) Pattern.UNICODE_CASE | Pattern.CASE_INSENSITIVE else 0)
+	val regex = Pattern.compile(text, if (caseType == CaseInsensitive) Pattern.UNICODE_CASE | Pattern.CASE_INSENSITIVE else 0)
 	def isMatch(s: Checkable): Boolean = regex.matcher(s.text).find()
 	// extract not required
 	def regexPattern = text
-	override def toString = "RegexChecker(" + text + ")"
+	override def toString = s"RegexChecker($caseType,$text)"
 	def description(long: Boolean = false): String = if (long) "regex (" + text.length + " characters)" else "regex"
 }
 
