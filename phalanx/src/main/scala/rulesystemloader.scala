@@ -3,8 +3,8 @@ package com.wikia.phalanx
 import scala.slick.driver.MySQLDriver.simple._
 
 object RuleSystemLoader {
-	case class PhalanxRecord(id: Int, pcase: Int, exact: Int,regex: Int, author: Int, ptype: Int, textBlob: Array[Byte],
-	                         reasonBlob: Array[Byte], expire: Option[String], lang: Option[String])	{
+	case class PhalanxRecord(id: Int, pcase: Int, exact: Int, regex: Int, author: Int, ptype: Int, textBlob: Array[Byte],
+	                         reasonBlob: Array[Byte], expire: Option[String], lang: Option[String]) {
 		def text = new String(textBlob, "UTF-8")
 		def reason = new String(reasonBlob, "UTF-8")
 	}

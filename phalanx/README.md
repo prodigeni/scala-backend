@@ -21,7 +21,7 @@
 Responds with: `PHALANX ALIVE` to show that the server works.
 
 ```
-$ curl --silent "http://localhost:8080/"
+$ curl --silent "http://localhost:4666/"
 PHALANX ALIVE
 ```
 
@@ -38,17 +38,17 @@ Result will be either `ok\n` or `failure\n`
 Examples:
 
 ```
-$ curl --silent "http://localhost:8080/check?lang=en&type=content&content=hello"
+$ curl --silent "http://localhost:4666/check?lang=en&type=content&content=hello"
 ok
 ```
 
 ```
-$ curl --silent "http://localhost:8080/check?lang=en&type=karamba&content=hello"
+$ curl --silent "http://localhost:4666/check?lang=en&type=karamba&content=hello"
 Unknown type parameter
 ```
 
 ```
-$ curl --silent "http://localhost:8080/check?lang=en&type=content&content=pornhub.com"
+$ curl --silent "http://localhost:4666/check?lang=en&type=content&content=pornhub.com"
 failure
 ```
 
@@ -58,17 +58,17 @@ Paremeters are the same as for `/check`, but results will be a json list (potent
 Each rule info is a JSON dictionary with following keys: id, text, reason, caseSensitive, exact, regex, language, expires, authorId
 
 ```
-$ curl --silent "http://localhost:8080/match?lang=en&type=content&content=hello"
+$ curl --silent "http://localhost:4666/match?lang=en&type=content&content=hello"
 []
 ```
 
 ```
-$ curl --silent "http://localhost:8080/match?lang=en&type=karamba&content=hello"
+$ curl --silent "http://localhost:4666/match?lang=en&type=karamba&content=hello"
 Unknown type parameter
 ```
 
 ```
-$ curl --silent "http://localhost:8080/match?lang=en&type=content&content=pornhub.com"
+$ curl --silent "http://localhost:4666/match?lang=en&type=content&content=pornhub.com"
 [{"regex" : true, "expires" : "", "text" : "pornhub\\.com", "reason" : "SpamRegex initial import", "exact" : false, "caseSensitive" : false, "id" : 4009, "language" : "", "authorId" : 184532, "type" : 1}]
 ```
 
@@ -80,12 +80,12 @@ Result will be either `ok\n` or `failure\n`
 Examples:
 
 ```
-$ curl --silent "http://localhost:8080/validate?regex=^alamakota$"
+$ curl --silent "http://localhost:4666/validate?regex=^alamakota$"
 ok
 ```
 
 ```
-$ curl --silent "http://localhost:8080/validate?regex=^alama(((kota$"
+$ curl --silent "http://localhost:4666/validate?regex=^alama(((kota$"
 failure
 ```
 
@@ -94,7 +94,7 @@ Optional parameter: changed - comma seperated list of integer rule ids for parti
 If not give, full reload will be done.
 
 ```
-$ curl --silent "http://localhost:8080/reload?changed=1,2,3"
+$ curl --silent "http://localhost:4666/reload?changed=1,2,3"
 ok
 ```
 
@@ -103,7 +103,7 @@ Show some text info about currenty loaded rules.
 
 Example:
 
-`$ curl --silent "http://localhost:8080/stats"`
+`$ curl --silent "http://localhost:4666/stats"`
 
     email:
       CombinedRuleSystem with total 75 rules and 3 checkers
@@ -174,6 +174,6 @@ Useful for debugging issues with reloading and matching.
 Examples:
 
 ```
-$ curl --silent "http://localhost:8080/view?id=100"
+$ curl --silent "http://localhost:4666/view?id=100"
 {"user" : {"regex" : true, "expires" : "", "text" : "Josh Gray", "reason" : "vandalism on swfanon", "exact" : false, "caseSensitive" : false, "id" : 100, "language" : "", "authorId" : 8245, "type" : 8}}
 ```

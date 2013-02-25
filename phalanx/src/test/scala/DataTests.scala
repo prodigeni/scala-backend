@@ -50,19 +50,24 @@ class DataTests extends FlatSpec {
 
 object DataTests {
 	val curdir = System.getProperty("user.dir")
-	val dir = if (curdir.endsWith("phalanx")) curdir else curdir + "/phalanx" // for tests to work when run from parent directory
+	val dir = if (curdir.endsWith("phalanx")) curdir else curdir + "/phalanx"
+	// for tests to work when run from parent directory
 	lazy val csv = new CSVFile(dir + "/src/test/resources/data1.csv").toStream.drop(1)
-	// skip header p_id,p_type,p_exact,p_regex,p_case,"cast(p_text as CHAR(255))"
-	lazy val rules = csv.map(arr => {
-		val Array(p_id: String, p_type: String, p_exact: String, p_regex: String, p_case: String, p_text: String) = arr
-		try {
-			new DatabaseRule(p_text, p_id.toInt, "", p_case == "1", p_exact == "1", p_regex == "1", None, None, 0, p_type.toInt)
-		}
-		catch {
-			case e: Throwable => {
-				printf("Could not create rule number: %s\n", p_id)
-				throw e
+	def makeRules(expires: Option[java.util.Date]) = {
+		csv.map(arr => {
+			val Array(p_id: String, p_type: String, p_exact: String, p_regex: String, p_case: String, p_text: String) = arr
+			try {
+				new DatabaseRule(p_text, p_id.toInt, "", p_case == "1", p_exact == "1", p_regex == "1", None, expires, 0, p_type.toInt)
 			}
-		}
-	}).toIndexedSeq
+			catch {
+				case e: Throwable => {
+					printf("Could not create rule number: %s\n", p_id)
+					throw e
+				}
+			}
+		}).toIndexedSeq
+	}
+
+	// skip header p_id,p_type,p_exact,p_regex,p_case,"cast(p_text as CHAR(255))"
+	lazy val rules = makeRules(None)
 }

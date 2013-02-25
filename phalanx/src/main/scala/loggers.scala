@@ -1,7 +1,8 @@
 package com.wikia.phalanx
 
 import org.slf4j.LoggerFactory
-import com.twitter.util.{Future, Time}
+import com.twitter.util.Future
+import com.twitter.util.Stopwatch
 
 case class NiceLogger(name: String) {
 	val logger = LoggerFactory.getLogger(name)
@@ -25,19 +26,19 @@ case class NiceLogger(name: String) {
 	}
 	def timeIt[T](name:String)(func: => T):T = {
 		if (logger.isTraceEnabled) {
-			val start = Time.now
+			val elapsed = Stopwatch.start()
 			val result = func
-			val duration = Time.now - start
-			logger.trace(name+" "+ duration.inMillis+"ms")
+			val duration = elapsed()
+			logger.trace(s"$name ${duration.inMillis}ms")
 			result
 		} else func
 	}
 	def timeIt[T](name:String, future: => Future[T]):Future[T] = {
 		if (logger.isTraceEnabled) {
-			val start = Time.now
+			val elapsed = Stopwatch.start()
 			future.onSuccess( _ => {
-				val duration = Time.now - start
-				logger.trace(name+" "+ duration.inMillis+"ms")
+				val duration = elapsed()
+				logger.trace(s"$name ${duration.inMillis}ms")
 			})
 		} else future
 	}
