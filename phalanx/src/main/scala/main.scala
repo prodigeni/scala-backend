@@ -71,7 +71,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 	def watchExpired() {
 		val minDates = rules.values.flatMap(ruleSystem => ruleSystem.expiring.headOption.map(rule => rule.expires.get))
 		expireWatchTask.map(task => {
-			logger.debug("Old expire task " + task + "cancelled")
+			logger.debug("Old expire task cancelled")
 			task.cancel()
 		})
 		if (minDates.isEmpty) {
@@ -86,9 +86,8 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 	}
 	def expire() {
 		expireWatchTask = None
-		logger.debug(s"Performing expire task")
 		val expired = expiredRules
-		logger.debug(s"Expired rule count: ${expired.size}")
+		logger.debug(s"Performing expire task - expired rule count: ${expired.size}")
 		if (expired.isEmpty) watchExpired() else afterReload(expired)
 	}
 	def expiredRules = {
