@@ -2,7 +2,7 @@ name := "wikifactory"
 
 organization := "com.wikia"
 
-version := "0.9"
+version := "0.10"
 
 scalaVersion := "2.10.0"
 
@@ -27,6 +27,7 @@ resolvers ++= Seq(
 )
 
 libraryDependencies ++= Seq(
+  "com.twitter" % "util-core_2.10" % "6.1.0",
   "org.yaml" % "snakeyaml" % "1.11",
   "com.typesafe.slick" %% "slick" % "1.0.0",
   "org.scalatest" % "scalatest_2.10" % "1.9.1" % "test",

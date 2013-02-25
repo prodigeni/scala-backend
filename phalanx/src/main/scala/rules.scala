@@ -1,7 +1,7 @@
 package com.wikia.phalanx
 
 import collection.mutable
-import java.util.Date
+import com.twitter.util.Time
 import java.util.regex.Pattern
 import util.parsing.json.JSONObject
 
@@ -81,7 +81,7 @@ trait DatabaseRuleInfo {
 	val exact: Boolean
 	val regex: Boolean
 	val language: Option[String]
-	val expires: Option[Date]
+	val expires: Option[Time]
 	val authorId: Int
 	val typeMask: Int
 	def toJSONObject:JSONObject = {
@@ -114,13 +114,13 @@ trait Rule {
 
 object Rule {
 	// simple test cases
-	def exact(text: String, cs: Boolean = true, lang: Option[String] = None, expires: Option[Date] = None) = new DatabaseRule(text, 0, "", cs, true, false, lang, expires, 0, 0)
-	def regex(text: String, cs: Boolean = true, lang: Option[String] = None, expires: Option[Date] = None) = new DatabaseRule(text, 0, "", cs, false, true, lang, expires, 0, 0)
-	def contains(text: String, cs: Boolean = true, lang: Option[String] = None, expires: Option[Date] = None) = new DatabaseRule(text, 0, "", cs, false, false, lang, expires, 0, 0)
+	def exact(text: String, cs: Boolean = true, lang: Option[String] = None, expires: Option[Time] = None) = new DatabaseRule(text, 0, "", cs, true, false, lang, expires, 0, 0)
+	def regex(text: String, cs: Boolean = true, lang: Option[String] = None, expires: Option[Time] = None) = new DatabaseRule(text, 0, "", cs, false, true, lang, expires, 0, 0)
+	def contains(text: String, cs: Boolean = true, lang: Option[String] = None, expires: Option[Time] = None) = new DatabaseRule(text, 0, "", cs, false, false, lang, expires, 0, 0)
 }
 
 case class DatabaseRule(text: String, dbId: Int, reason: String, caseSensitive: Boolean, exact: Boolean, regex: Boolean,
-                        language: Option[String], expires: Option[Date], authorId: Int, typeMask: Int) extends DatabaseRuleInfo with Rule {
+                        language: Option[String], expires: Option[Time], authorId: Int, typeMask: Int) extends DatabaseRuleInfo with Rule {
 	val caseType = if (caseSensitive || DatabaseRuleInfo.letterPattern.findFirstIn(text).isEmpty) CaseSensitive else CaseInsensitive
 	val checker: Checker = {
 		if (regex) new RegexChecker(caseType, text)
@@ -144,10 +144,8 @@ trait RuleSystem extends Rule {
 class FlatRuleSystem(initialRules: Iterable[DatabaseRule]) extends RuleSystem {
 	val rules = initialRules.toSet
 	val ruleStream = rules.toStream
-	val expiring = rules.filter(r => r.expires.isDefined).toIndexedSeq.sortBy((r: DatabaseRuleInfo) => r.expires.get.getTime)
-	def isMatch(s: Checkable): Boolean = rules.exists {
-		_.isMatch(s)
-	}
+	val expiring = rules.filter(r => r.expires.isDefined).toIndexedSeq.sortBy((r: DatabaseRuleInfo) => r.expires.get)
+	def isMatch(s: Checkable): Boolean = rules.exists(_.isMatch(s))
 	def allMatches(s: Checkable) = ruleStream.flatMap((x: DatabaseRule) => x.allMatches(s))
 	def combineRules: CombinedRuleSystem = new CombinedRuleSystem(initialRules)
 	def copy(rules: Iterable[DatabaseRule]): RuleSystem = new FlatRuleSystem(rules)

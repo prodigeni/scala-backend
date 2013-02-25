@@ -79,7 +79,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 			expireWatchTask = None
 			logger.debug("Expire task not required")
 		} else {
-			nextExpireDate = Some(Time(minDates.min) + 1.second)
+			nextExpireDate = Some(minDates.min + 1.second)
 			logger.debug(s"Scheduling expire task at ${nextExpireDate.get}")
 			expireWatchTask = Some(timer.schedule(nextExpireDate.get)(expire _))
 		}
@@ -92,7 +92,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 	}
 	def expiredRules = {
 		val now = Time.now
-		rules.values.flatMap(ruleSystem => ruleSystem.expiring.takeWhile(rule => now >= Time(rule.expires.get))).map(r => r.dbId)
+		rules.values.flatMap(ruleSystem => ruleSystem.expiring.takeWhile(rule => now >= rule.expires.get)).map(r => r.dbId)
 	}
 	def afterReload(expired: Traversable[Int]) {
 		rules = reloader(rules, expired).toMap

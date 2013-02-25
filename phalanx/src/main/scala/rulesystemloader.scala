@@ -1,12 +1,17 @@
 package com.wikia.phalanx
 
 import scala.slick.driver.MySQLDriver.simple._
+import com.twitter.util.Time
 
 object RuleSystemLoader {
 	case class PhalanxRecord(id:Int, pcase:Int, exact:Int, regex:Int, author:Int, ptype:Int, textBlob:Array[Byte],
-		reasonBlob:Array[Byte], expire:Option[String], lang:Option[String]) {
+		reasonBlob:Array[Byte], expireText:Option[String], lang:Option[String]) {
 		def text = new String(textBlob, "UTF-8")
 		def reason = new String(reasonBlob, "UTF-8")
+		def expire = expireText match {
+			case None => None
+			case Some(x) => com.wikia.wikifactory.DB.fromWikiTime(x)
+		}
 	}
 
 	object PhalanxTable extends Table[PhalanxRecord]("phalanx") {
@@ -18,10 +23,10 @@ object RuleSystemLoader {
 		def ptype = column[Int]("p_type")
 		def text = column[Array[Byte]]("p_text")
 		def reason = column[Array[Byte]]("p_reason")
-		def expire = column[Option[String]]("p_expire")
+		def expireText = column[Option[String]]("p_expire")
 		def lang = column[Option[String]]("p_lang")
 		// Every table needs a * projection with the same type as the table's type parameter
-		def * = id ~ pcase ~ exact ~ regex ~ author ~ ptype ~ text ~ reason ~ expire ~ lang <>(PhalanxRecord, PhalanxRecord.unapply _)
+		def * = id ~ pcase ~ exact ~ regex ~ author ~ ptype ~ text ~ reason ~ expireText ~ lang <>(PhalanxRecord, PhalanxRecord.unapply _)
 	}
 
 	val logger = NiceLogger("RuleSystemLoader")
@@ -39,16 +44,7 @@ object RuleSystemLoader {
 	)
 
 	def makeDbInfo(row:PhalanxRecord) = {
-		val lang = row.lang
-		val date = row.expire
-
-		new DatabaseRule(row.text, row.id, row.reason,
-			row.pcase == 1, row.exact == 1, row.regex == 1, lang,
-			date match {
-				case None => None
-				case Some(x) => com.wikia.wikifactory.DB.fromWikiTime(x)
-			},
-			row.author, row.ptype)
+		new DatabaseRule(row.text, row.id, row.reason,row.pcase == 1, row.exact == 1, row.regex == 1, row.lang, row.expire,	row.author, row.ptype)
 	}
 	private def ruleBuckets = (for (v <- contentTypes.values) yield (v, collection.mutable.Set.empty[DatabaseRule])).toMap
 	private def dbRows(db:Database, ids:Option[Set[Int]]):Seq[PhalanxRecord] = {
@@ -58,7 +54,7 @@ object RuleSystemLoader {
 				implicit session:Session =>
 					db.withTransaction {
 						val current = com.wikia.wikifactory.DB.wikiCurrentTime
-						val query = Query(PhalanxTable).filter(x => x.expire.isNull || x.expire.>(current))
+						val query = Query(PhalanxTable).filter(x => x.expireText.isNull || x.expireText.>(current))
 						val query2 = ids match {
 							case None => query
 							case Some(s) => query.filter(x => x.id.inSet(s))

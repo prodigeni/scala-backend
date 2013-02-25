@@ -29,7 +29,7 @@ class ScribeMock extends ScribeLike {
 class ServiceTests extends FlatSpec {
 	val charset = Charset.forName("utf-8")
 	val expireTime = Time.at("2099-01-01 12:00:00 UTC")
-	val rules = Map(("tests", new CombinedRuleSystem(DataTests.makeRules(Some(expireTime.toDate)))))
+	val rules = Map(("tests", new CombinedRuleSystem(DataTests.makeRules(Some(expireTime)))))
 
 	def reloadSome(oldMap: Map[String, RuleSystem], changedIds: Set[Int]): Map[String, RuleSystem] = {
 		if (changedIds.isEmpty) rules else rules.mapValues(r => r.reloadRules(Seq.empty, changedIds)).toMap

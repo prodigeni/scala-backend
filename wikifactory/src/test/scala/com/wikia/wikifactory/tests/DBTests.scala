@@ -1,6 +1,7 @@
 package com.wikia.wikifactory.tests
 
 import org.scalatest._
+import com.twitter.util.Time
 
 class DBTests extends FlatSpec {
   import com.wikia.wikifactory.DB
@@ -8,7 +9,7 @@ class DBTests extends FlatSpec {
   val cal = java.util.Calendar.getInstance(DB.dbTimeZone)
   cal.clear()
   cal.set(2005, 0, 3, 5, 7, 9)  // java is brain dead: months are counted from 0
-  val tDate = cal.getTime
+  val tDate = Time(cal.getTime)
   val wikiDate = "20050103050709"
 
   "Conversions" should "work with fromWikiTime" in {

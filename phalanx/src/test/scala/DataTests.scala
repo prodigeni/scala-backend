@@ -3,6 +3,7 @@ package com.wikia.phalanx.tests
 import au.com.bytecode.opencsv.CSVReader
 import com.wikia.phalanx._
 import org.scalatest._
+import com.twitter.util.Time
 
 class CSVFile(fileName: String, charset: String = "UTF-8", separator: Char = ',', quote: Char = '"', escape: Char = '\0') extends Traversable[Array[String]] {
 	override def foreach[U](f: Array[String] => U) {
@@ -53,7 +54,7 @@ object DataTests {
 	val dir = if (curdir.endsWith("phalanx")) curdir else curdir + "/phalanx"
 	// for tests to work when run from parent directory
 	lazy val csv = new CSVFile(dir + "/src/test/resources/data1.csv").toStream.drop(1)
-	def makeRules(expires: Option[java.util.Date]) = {
+	def makeRules(expires: Option[Time]) = {
 		csv.map(arr => {
 			val Array(p_id: String, p_type: String, p_exact: String, p_regex: String, p_case: String, p_text: String) = arr
 			try {

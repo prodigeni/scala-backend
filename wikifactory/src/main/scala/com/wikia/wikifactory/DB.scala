@@ -8,6 +8,8 @@
 
 package com.wikia.wikifactory
 
+import com.twitter.util.{Time, TimeFormat}
+
 object DB {
   val DB_MASTER       : Int = -2
   val DB_SLAVE        : Int = -1
@@ -20,30 +22,14 @@ object DB {
   val DB_SPECIALS     = List("smw+")
 
   val dbTimeZone = java.util.TimeZone.getTimeZone("UTC")
-  val mediaWikiTimeFormat:java.text.DateFormat = {
-    val f = new java.text.SimpleDateFormat("yyyyMMddHHmmss")
-    val cal = java.util.Calendar.getInstance(dbTimeZone)
-    f.setCalendar(cal)
-    f.setTimeZone(dbTimeZone)
-    f.setLenient(false)
-    f
-  }
+  val mediaWikiTimeFormat = new TimeFormat("yyyyMMddHHmmss")
 
-  def wikiCurrentTime = toWikiTime(new java.util.Date())
-  def toWikiTime(date: java.util.Date) = mediaWikiTimeFormat.format(date)
-  def fromWikiTime(dateBytes: Array[Byte]):Option[java.util.Date] = {
-    if (dateBytes == null) {
-      None
-    } else {
-      val text = new String(dateBytes, "ascii")
-      Some(mediaWikiTimeFormat.parse(text))
-    }
+  def wikiCurrentTime = toWikiTime(Time.now)
+  def toWikiTime(date: Time):String = mediaWikiTimeFormat.format(date)
+  def fromWikiTime(dateBytes: Array[Byte]):Option[Time] = {
+    if (dateBytes == null) None else Some(mediaWikiTimeFormat.parse(new String(dateBytes, "ascii")))
   }
-  def fromWikiTime(date: String):Option[java.util.Date] = {
-    val bytes:Array[Byte] = date.toCharArray.map( x => x.toByte)
-    fromWikiTime(bytes)
-  }
-
+  def fromWikiTime(date: String):Option[Time] = fromWikiTime(date.toCharArray.map(_.toByte))
 }
 
 case class dbException( msg:String ) extends Exception
