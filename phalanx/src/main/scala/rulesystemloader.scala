@@ -3,8 +3,8 @@ package com.wikia.phalanx
 import scala.slick.driver.MySQLDriver.simple._
 
 object RuleSystemLoader {
-	case class PhalanxRecord(id: Int, pcase: Int, exact: Int, regex: Int, author: Int, ptype: Int, textBlob: Array[Byte],
-	                         reasonBlob: Array[Byte], expire: Option[String], lang: Option[String]) {
+	case class PhalanxRecord(id:Int, pcase:Int, exact:Int, regex:Int, author:Int, ptype:Int, textBlob:Array[Byte],
+		reasonBlob:Array[Byte], expire:Option[String], lang:Option[String]) {
 		def text = new String(textBlob, "UTF-8")
 		def reason = new String(reasonBlob, "UTF-8")
 	}
@@ -38,7 +38,7 @@ object RuleSystemLoader {
 		(256, "email") // const TYPE_EMAIL = 256;
 	)
 
-	def makeDbInfo(row: PhalanxRecord) = {
+	def makeDbInfo(row:PhalanxRecord) = {
 		val lang = row.lang
 		val date = row.expire
 
@@ -51,11 +51,11 @@ object RuleSystemLoader {
 			row.author, row.ptype)
 	}
 	private def ruleBuckets = (for (v <- contentTypes.values) yield (v, collection.mutable.Set.empty[DatabaseRule])).toMap
-	private def dbRows(db: Database, ids: Option[Set[Int]]): Seq[PhalanxRecord] = {
+	private def dbRows(db:Database, ids:Option[Set[Int]]):Seq[PhalanxRecord] = {
 		logger.info("Getting database rows")
 		val rows = tryNTimes(3, {
 			db.withSession({
-				implicit session: Session =>
+				implicit session:Session =>
 					db.withTransaction {
 						val current = com.wikia.wikifactory.DB.wikiCurrentTime
 						val query = Query(PhalanxTable).filter(x => x.expire.isNull || x.expire.>(current))
@@ -68,37 +68,37 @@ object RuleSystemLoader {
 					}
 			})
 		}) match {
-			case Left(e: Throwable) => throw e
+			case Left(e:Throwable) => throw e
 			case Right(x) => x.toIndexedSeq
 		}
 		logger.info("Got " + rows.length + " rows")
 		rows
 	}
-	private def createRules(rows: Seq[PhalanxRecord]) = {
+	private def createRules(rows:Seq[PhalanxRecord]) = {
 		val result = ruleBuckets
 		val ids = collection.mutable.Set.empty[Int]
-		for (row: PhalanxRecord <- rows) {
+		for (row:PhalanxRecord <- rows) {
 			try {
 				val rule = makeDbInfo(row)
 				val t = row.ptype
-				for ((i: Int, s: String) <- contentTypes) {
+				for ((i:Int, s:String) <- contentTypes) {
 					if ((i & t) != 0) result(s) += rule
 				}
 				ids += rule.dbId
 			}
 			catch {
-				case e: java.util.regex.PatternSyntaxException => None
-				case e: Throwable => throw e
+				case e:java.util.regex.PatternSyntaxException => None
+				case e:Throwable => throw e
 			}
 		}
 		(result, ids)
 	}
-	def fromDatabase(db: Database): Map[String, RuleSystem] = {
+	def fromDatabase(db:Database):Map[String, RuleSystem] = {
 		val rows = dbRows(db, None)
 		val (result, _) = createRules(rows)
 		result.transform((_, rules) => new CombinedRuleSystem(rules))
 	}
-	def reloadSome(db: Database, oldMap: Map[String, RuleSystem], changedIds: Set[Int]): Map[String, RuleSystem] = {
+	def reloadSome(db:Database, oldMap:Map[String, RuleSystem], changedIds:Set[Int]):Map[String, RuleSystem] = {
 		if (changedIds.isEmpty) {
 			// no info, let's do a full reload
 			fromDatabase(db)

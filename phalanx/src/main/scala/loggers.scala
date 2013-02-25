@@ -1,8 +1,8 @@
 package com.wikia.phalanx
 
-import org.slf4j.LoggerFactory
 import com.twitter.util.Future
 import com.twitter.util.Stopwatch
+import org.slf4j.LoggerFactory
 
 case class NiceLogger(name: String) {
 	val logger = LoggerFactory.getLogger(name)
@@ -24,25 +24,29 @@ case class NiceLogger(name: String) {
 	def exception(message: String, error: Throwable) {
 		if (logger.isErrorEnabled) logger.error(message, error)
 	}
-	def timeIt[T](name:String)(func: => T):T = {
+	def timeIt[T](name: String)(func: => T): T = {
 		if (logger.isTraceEnabled) {
 			val elapsed = Stopwatch.start()
 			val result = func
 			val duration = elapsed()
 			logger.trace(s"$name ${duration.inMillis}ms")
 			result
-		} else func
+		} else {
+			func
+		}
 	}
-	def timeIt[T](name:String, future: => Future[T]):Future[T] = {
+	def timeIt[T](name: String, future: => Future[T]): Future[T] = {
 		if (logger.isTraceEnabled) {
 			val elapsed = Stopwatch.start()
-			future.onSuccess( _ => {
+			future.onSuccess(_ => {
 				val duration = elapsed()
 				logger.trace(s"$name ${duration.inMillis}ms")
 			})
-		} else future
+		} else {
+			future
+		}
 	}
 
-	lazy val functions = Map( ("info", info _), ("error", error _), ("debug", debug _), ("warn", warn _), ("trace", trace _) )
-	def apply(level:String, messageBlock: => String) = functions.get(level).map { _(messageBlock) }
+	lazy val functions = Map(("info", info _), ("error", error _), ("debug", debug _), ("warn", warn _), ("trace", trace _))
+	def apply(level: String, messageBlock: => String) = functions.get(level).map {_(messageBlock)}
 }

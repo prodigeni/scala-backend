@@ -49,7 +49,7 @@ object Respond {
 }
 
 class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => Map[String, RuleSystem],
-                  val scribe: Service[Map[String, Any], Unit], threadCount: Option[Int] = None) extends Service[Request, Response] {
+	val scribe: Service[Map[String, Any], Unit], threadCount: Option[Int] = None) extends Service[Request, Response] {
 	def this(initialRules: Map[String, RuleSystem], scribe: Service[Map[String, Any], Unit]) = this((_, _) => initialRules, scribe)
 	private val logger = NiceLogger("MainService")
 	var nextExpireDate: Option[Time] = None
@@ -57,10 +57,9 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 	val timer = com.twitter.finagle.util.DefaultTimer.twitter
 	@transient var rules = reloader(Map.empty, Seq.empty)
 	val threadPoolSize = threadCount.getOrElse(Runtime.getRuntime.availableProcessors())
-	val futurePool = if (threadPoolSize <= 0) FuturePool.immediatePool
-	else FuturePool(
-		java.util.concurrent.Executors.newFixedThreadPool(threadPoolSize, new NamedPoolThreadFactory("MainService pool"))
-	)
+	val futurePool = if (threadPoolSize <= 0) {FuturePool.immediatePool} else {
+		FuturePool(java.util.concurrent.Executors.newFixedThreadPool(threadPoolSize, new NamedPoolThreadFactory("MainService pool")))
+	}
 	watchExpired()
 
 	override def close(deadline: Time) = {
@@ -190,14 +189,17 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 		val user = params.get("user")
 		val wiki = params.get("wiki").map(_.toInt)
 		val checkTypes = params.getAll("type")
-		val ruleSystems: Iterable[RuleSystem] = if (checkTypes.isEmpty) rules.values
-		else
+		val ruleSystems: Iterable[RuleSystem] = if (checkTypes.isEmpty) {
+			rules.values
+		}
+		else {
 			try {
 				checkTypes.map(s => rules(s)).toSet
 			} catch {
 				case _: NoSuchElementException => Set.empty
 			}
-		val combinations: Iterable[(RuleSystem, Checkable)] = (for (r <- ruleSystems; c <- content) yield (r, c))
+		}
+		val combinations: Iterable[(RuleSystem, Checkable)] = (for (r <- ruleSystems;c <- content) yield (r, c))
 
 		def findMatches(limit: Int): Seq[DatabaseRuleInfo] = {
 			val matches = combinations.view.flatMap((pair: (RuleSystem, Checkable)) => pair._1.allMatches(pair._2))
@@ -206,35 +208,49 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 			result.toSeq
 		}
 		def checkResponse = {
-			if (ruleSystems.isEmpty) Respond.unknownType
-			else
-			if (content.isEmpty) Respond.contentMissing
+			if (ruleSystems.isEmpty) {
+				Respond.unknownType
+			}
 			else {
-				val matches = findMatches(1)
-				logger.debug(s"check: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
-				if (matches.isEmpty) Respond.ok else Respond.failure
+				if (content.isEmpty) {
+					Respond.contentMissing
+				}
+				else {
+					val matches = findMatches(1)
+					logger.debug(s"check: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
+					if (matches.isEmpty) Respond.ok else Respond.failure
+				}
 			}
 		}
 		def matchResponse = {
-			if (ruleSystems.isEmpty) Respond.unknownType
-			else
-			if (content.isEmpty) Respond.contentMissing
+			if (ruleSystems.isEmpty) {
+				Respond.unknownType
+			}
 			else {
-				val limit = request.params.getIntOrElse("limit", 1)
-				val matches = findMatches(limit)
-				logger.debug(s"match: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
-				Respond.json(matches)
+				if (content.isEmpty) {
+					Respond.contentMissing
+				}
+				else {
+					val limit = request.params.getIntOrElse("limit", 1)
+					val matches = findMatches(limit)
+					logger.debug(s"match: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
+					Respond.json(matches)
+				}
 			}
 		}
 		def sendToScribe(rule: DatabaseRuleInfo): Future[Unit] = {
-			if (user.isDefined && wiki.isDefined) scribe(Map(
-				("blockId", rule.dbId),
-				("blockType", rule.typeMask),
-				("blockTs", com.wikia.wikifactory.DB.wikiCurrentTime),
-				("blockUser", user.get),
-				("city_id", wiki.get)
-			))
-			else Future.Done
+			if (user.isDefined && wiki.isDefined) {
+				scribe(Map(
+					("blockId", rule.dbId),
+					("blockType", rule.typeMask),
+					("blockTs", com.wikia.wikifactory.DB.wikiCurrentTime),
+					("blockUser", user.get),
+					("city_id", wiki.get)
+				))
+			}
+			else {
+				Future.Done
+			}
 		}
 	}
 }
@@ -251,8 +267,7 @@ object Main extends App {
 			.find(fileName => {
 			val file = new File(fileName)
 			file.exists() && file.canRead
-		}
-		)
+		})
 	}
 
 	def loadProperties(fileName: String): java.util.Properties = {
