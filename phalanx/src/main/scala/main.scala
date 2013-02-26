@@ -316,7 +316,7 @@ object Main extends App {
     .keepAlive(true)
     .hostConnectionMaxIdleTime(30.seconds)
 		.bindTo(new java.net.InetSocketAddress(port))
-  Netty3Listener
+
 
 	val server = config.build(ExceptionFilter andThen NewRelic andThen mainService)
 	logger.info(s"Listening on port: $port")
