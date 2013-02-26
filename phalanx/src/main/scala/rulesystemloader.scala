@@ -1,7 +1,6 @@
 package com.wikia.phalanx
 
 import scala.slick.driver.MySQLDriver.simple._
-import com.twitter.util.Time
 
 object RuleSystemLoader {
 	case class PhalanxRecord(id:Int, pcase:Int, exact:Int, regex:Int, author:Int, ptype:Int, textBlob:Array[Byte],

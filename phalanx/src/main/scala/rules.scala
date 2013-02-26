@@ -86,20 +86,20 @@ trait DatabaseRuleInfo {
 	val typeMask: Int
 	def toJSONObject:JSONObject = {
 		JSONObject(Map(
-			("id", dbId),
-			("text", text),
-			("type", typeMask),
-			("reason", reason),
-		  ("caseSensitive", caseSensitive),
-		  ("exact", exact),
-		  ("regex", regex),
-		  ("language", language.getOrElse("")),
-		  ("authorId", authorId),
-		  ("expires", expires match {
+			"id" → dbId,
+			"text" → text,
+			"type" → typeMask,
+			"reason" → reason,
+		  "caseSensitive" → caseSensitive,
+		  "exact" → exact,
+		  "regex" →  regex,
+		  "language" → language.getOrElse(""),
+		  "authorId" → authorId,
+		  "expires" → (expires match {
 			  case None => ""
 				case Some(date) => com.wikia.wikifactory.DB.toWikiTime(date)
-		  })
-		))
+      }))
+    )
 	}
 }
 

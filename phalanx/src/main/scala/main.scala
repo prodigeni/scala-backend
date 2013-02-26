@@ -15,6 +15,7 @@ import java.util.NoSuchElementException
 import java.util.regex.PatternSyntaxException
 import org.jboss.netty.handler.codec.http.HttpResponseStatus
 import util.parsing.json.{JSONObject, JSONArray, JSONFormat}
+import com.twitter.finagle.netty3.Netty3Listener
 
 class ExceptionLogger[Req, Rep](val logger: NiceLogger) extends SimpleFilter[Req, Rep] {
 	def this(loggerName: String) = this(NiceLogger(loggerName))
@@ -189,10 +190,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 		val user = params.get("user")
 		val wiki = params.get("wiki").map(_.toInt)
 		val checkTypes = params.getAll("type")
-		val ruleSystems: Iterable[RuleSystem] = if (checkTypes.isEmpty) {
-			rules.values
-		}
-		else {
+		val ruleSystems: Iterable[RuleSystem] = if (checkTypes.isEmpty) rules.values else {
 			try {
 				checkTypes.map(s => rules(s)).toSet
 			} catch {
@@ -208,14 +206,8 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 			result.toSeq
 		}
 		def checkResponse = {
-			if (ruleSystems.isEmpty) {
-				Respond.unknownType
-			}
-			else {
-				if (content.isEmpty) {
-					Respond.contentMissing
-				}
-				else {
+			if (ruleSystems.isEmpty) Respond.unknownType else {
+				if (content.isEmpty) 	Respond.contentMissing	else {
 					val matches = findMatches(1)
 					logger.debug(s"check: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
 					if (matches.isEmpty) Respond.ok else Respond.failure
@@ -223,14 +215,8 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 			}
 		}
 		def matchResponse = {
-			if (ruleSystems.isEmpty) {
-				Respond.unknownType
-			}
-			else {
-				if (content.isEmpty) {
-					Respond.contentMissing
-				}
-				else {
+			if (ruleSystems.isEmpty) Respond.unknownType else {
+        if (content.isEmpty) Respond.contentMissing	else {
 					val limit = request.params.getIntOrElse("limit", 1)
 					val matches = findMatches(limit)
 					logger.debug(s"match: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
@@ -241,35 +227,19 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 		def sendToScribe(rule: DatabaseRuleInfo): Future[Unit] = {
 			if (user.isDefined && wiki.isDefined) {
 				scribe(Map(
-					("blockId", rule.dbId),
-					("blockType", rule.typeMask),
-					("blockTs", com.wikia.wikifactory.DB.wikiCurrentTime),
-					("blockUser", user.get),
-					("city_id", wiki.get)
+					"blockId" → rule.dbId,
+					"blockType" → rule.typeMask,
+					"blockTs" → com.wikia.wikifactory.DB.wikiCurrentTime,
+					"blockUser" → user.get,
+					"city_id" → wiki.get
 				))
 			}
-			else {
-				Future.Done
-			}
+			else Future.Done
 		}
 	}
 }
 
 object Main extends App {
-	val cfName: Option[String] = sys.props.get("phalanx.config") orElse {
-		// load config from first config file that exists
-		Seq(
-			"phalanx.properties",
-			"/usr/wikia/conf/current/phalanx.properties",
-			"/usr/wikia/docroot/phalanx.properties",
-			"phalanx.default.properties",
-			"/usr/wikia/phalanx/phalanx.default.properties")
-			.find(fileName => {
-			val file = new File(fileName)
-			file.exists() && file.canRead
-		})
-	}
-
 	def loadProperties(fileName: String): java.util.Properties = {
 		val file = new File(fileName)
 		val properties = new java.util.Properties()
@@ -284,6 +254,19 @@ object Main extends App {
 		new ScribeClient("log_phalanx", host, port)
 	}
 
+	val cfName: Option[String] = sys.props.get("phalanx.config") orElse {
+		// load config from first config file that exists
+		Seq(
+			"phalanx.properties",
+			"/usr/wikia/conf/current/phalanx.properties",
+			"/usr/wikia/docroot/phalanx.properties",
+			"phalanx.default.properties",
+			"/usr/wikia/phalanx/phalanx.default.properties")
+			.find(fileName => {
+			val file = new File(fileName)
+			file.exists() && file.canRead
+		})
+	}
 	cfName match {
 		case Some(fileName) => sys.props ++= loadProperties(fileName).toMap
 		case None => {
@@ -291,10 +274,15 @@ object Main extends App {
 			System.exit(2)
 		}
 	}
-
 	val logger = NiceLogger("Main")
 	val versionString = s"Phalanx server version ${PhalanxVersion.version}"
 	logger.info(s"$versionString starting, properties loaded from ${cfName.get}")
+	val preloaded = PackagePreloader(this.getClass, Seq(
+		"com.wikia.phalanx",
+		"com.twitter.finagle.http",
+		"com.twitter.util"
+	))
+	logger.info("Preloaded " + preloaded.size + " classes")
 	val scribe = {
 		val scribetype = wikiaProp("scribe")
 		logger.info("Creating scribe client (" + scribetype + ")")
@@ -304,13 +292,11 @@ object Main extends App {
 			case "discard" => new ScribeDiscard()
 		}
 	}
-
 	val port = wikiaProp("port").toInt
 	val threadCount: Option[Int] = wikiaProp("com.wikia.phalanx.threads") match {
 		case s: String if (s != null && s.nonEmpty) => Some(s.toInt)
 		case _ => None
 	}
-
 	val database = new DB(DB.DB_MASTER, None, "wikicities")
 	logger.info("Connecting to database from configuration file " + database.config.sourcePath)
 	val dbSession = database.connect()
@@ -320,22 +306,17 @@ object Main extends App {
 		new ExceptionLogger(logger) andThen scribe,
 		threadCount
 	)
-
 	val config = ServerBuilder()
 		.codec(RichHttp[Request](Http()))
 		.name("Phalanx")
 		.maxConcurrentRequests(Seq(20, mainService.threadPoolSize).max)
-		.sendBufferSize(16 * 1024)
-		.recvBufferSize(32 * 1024)
-		.backlog(500)
+		.sendBufferSize(1024)
+		.recvBufferSize(32*1024)
+		.backlog(100)
+    .keepAlive(true)
+    .hostConnectionMaxIdleTime(30.seconds)
 		.bindTo(new java.net.InetSocketAddress(port))
-
-	val preloaded = PackagePreloader(this.getClass, Seq(
-		"com.wikia.phalanx",
-		"com.twitter.finagle.http",
-		"com.twitter.util"
-	))
-	logger.info("Preloaded " + preloaded.size + " classes")
+  Netty3Listener
 
 	val server = config.build(ExceptionFilter andThen NewRelic andThen mainService)
 	logger.info(s"Listening on port: $port")
