@@ -91,12 +91,22 @@ failure
 
 ### /reload
 Optional parameter: changed - comma seperated list of integer rule ids for partial reload
-If not give, full reload will be done.
+If not given, full reload will be done.
+Notifies other nodes (node names should be in property com.wikia.phalanx.notifynodes)
 
 ```
 $ curl --silent "http://localhost:4666/reload?changed=1,2,3"
 ok
 ```
+
+### /notify
+Same as reload, but does not notify other nodes in the cluster.
+
+```
+$ curl --silent "http://localhost:4666/notify?changed=1,2,3"
+ok
+```
+
 
 ### /stats
 Show some text info about currenty loaded rules.

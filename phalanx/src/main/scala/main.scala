@@ -3,7 +3,7 @@ package com.wikia.phalanx
 import collection.JavaConversions._
 import com.twitter.concurrent.NamedPoolThreadFactory
 import com.twitter.conversions.time._
-import com.twitter.finagle.builder.ServerBuilder
+import com.twitter.finagle.builder.{ClientBuilder, ServerBuilder}
 import com.twitter.finagle.http.RichHttp
 import com.twitter.finagle.http.filter.ExceptionFilter
 import com.twitter.finagle.http.{Http, Request, Status, Version, Response, Message}
@@ -15,7 +15,6 @@ import java.util.NoSuchElementException
 import java.util.regex.PatternSyntaxException
 import org.jboss.netty.handler.codec.http.HttpResponseStatus
 import util.parsing.json.{JSONObject, JSONArray, JSONFormat}
-import com.twitter.finagle.netty3.Netty3Listener
 
 class ExceptionLogger[Req, Rep](val logger: NiceLogger) extends SimpleFilter[Req, Rep] {
 	def this(loggerName: String) = this(NiceLogger(loggerName))
@@ -50,11 +49,24 @@ object Respond {
 }
 
 class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => Map[String, RuleSystem],
-	val scribe: Service[Map[String, Any], Unit], threadCount: Option[Int] = None) extends Service[Request, Response] {
+	val scribe: Service[Map[String, Any], Unit], threadCount: Option[Int] = None, notifyNodes: Seq[String] = Seq.empty  ) extends Service[Request, Response] {
 	def this(initialRules: Map[String, RuleSystem], scribe: Service[Map[String, Any], Unit]) = this((_, _) => initialRules, scribe)
 	private val logger = NiceLogger("MainService")
 	var nextExpireDate: Option[Time] = None
 	var expireWatchTask: Option[TimerTask] = None
+  val notifyMap = {
+    val hostname = java.net.InetAddress.getLocalHost.getHostName
+    logger.info(s"Local hostname: $hostname")
+    notifyNodes.filterNot(x => x == hostname).map( node => {
+      val client = ClientBuilder()
+        .codec(Http())
+        .hosts(new java.net.InetSocketAddress(node, 4666)) // TODO: port hardcoded for now
+        .hostConnectionLimit(1)
+        .build()
+      logger.info(s"Created client for cluster node notifications: $node")
+      (node, client)
+    }).toMap
+  }
 	val timer = com.twitter.finagle.util.DefaultTimer.twitter
 	@transient var rules = reloader(Map.empty, Seq.empty)
 	val threadPoolSize = threadCount.getOrElse(Runtime.getRuntime.availableProcessors())
@@ -89,13 +101,13 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 		expireWatchTask = None
 		val expired = expiredRules
 		logger.debug(s"Performing expire task - expired rule count: ${expired.size}")
-		if (expired.isEmpty) watchExpired() else afterReload(expired)
+		if (expired.isEmpty) watchExpired() else refreshRules(expired)
 	}
 	def expiredRules = {
 		val now = Time.now
 		rules.values.flatMap(ruleSystem => ruleSystem.expiring.takeWhile(rule => rule.expires.get <= now)).map(r => r.dbId)
 	}
-	def afterReload(expired: Traversable[Int]) {
+	def refreshRules(expired: Traversable[Int]) {
 		rules = reloader(rules, expired).toMap
 		watchExpired()
 	}
@@ -110,11 +122,23 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 		}
 		response
 	}
-	def reload(request: Request) = {
-		val changed = request.getParam("changed", "").split(',').toSeq.filter(_ != "")
+  def sendNotify(ids: Seq[Int]):Future[Unit] = {
+    val request: Request = if (ids.isEmpty) Request("/notify") else Request("/notify", "changed" -> ids.mkString(","))
+    val responses = notifyMap.map( (pair) => {
+      val (node, client) = pair
+      // Issue a request, get a response:
+      val response = client(request)
+      response.onFailure( (exc) => logger.exception(s"Could not notify node $node", exc))
+    })
+    Future.join(responses.toSeq)
+  }
+	def reload(request: Request, notify: Boolean) = {
+		val changed = request.getParams("changed").mkString(",").split(',').toSeq.filter(_ != "") // support both multiple and comma-separated params
 		val ids = if (changed.isEmpty) Seq.empty[Int] else changed.map(_.toInt)
-		afterReload(ids)
-		Respond.ok
+    val notified = if (notify) sendNotify(ids) else Future.Done
+    refreshRules(ids)
+    notified()
+    Respond.ok
 	}
 	def stats(request: Request): Response = Respond(statsString)
 	def statsString: String = {
@@ -169,7 +193,8 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 			case "match" => futurePool(ParsedRequest(request).matchResponse)
 			case "check" => futurePool(ParsedRequest(request).checkResponse)
 			case "validate" => futurePool(validateRegex(request))
-			case "reload" => futurePool(reload(request))
+			case "reload" => futurePool(reload(request, false))
+      case "notify" => futurePool(reload(request, true))
 			case "stats" => futurePool(stats(request))
 			case "view" => futurePool(viewRule(request))
 			case x => {
@@ -293,18 +318,23 @@ object Main extends App {
 		}
 	}
 	val port = wikiaProp("port").toInt
-	val threadCount: Option[Int] = wikiaProp("com.wikia.phalanx.threads") match {
+	val threadCount: Option[Int] = wikiaProp("threads") match {
 		case s: String if (s != null && s.nonEmpty) => Some(s.toInt)
 		case _ => None
 	}
-	val database = new DB(DB.DB_MASTER, None, "wikicities")
-	logger.info("Connecting to database from configuration file " + database.config.sourcePath)
+  val notifyNodes = wikiaProp("notifynodes") match {
+    case s: String if (s != null && s.nonEmpty) => s.split(' ').toSeq
+    case _ => Seq.empty
+  }
+  val database = new DB(DB.DB_MASTER, None, "wikicities")
+  logger.info("Connecting to database from configuration file " + database.config.sourcePath)
 	val dbSession = database.connect()
-	logger.info("Loading rules from database")
+  logger.info("Loading rules from database")
 	val mainService = new MainService(
 		(old, changed) => RuleSystemLoader.reloadSome(dbSession, old, changed.toSet),
 		new ExceptionLogger(logger) andThen scribe,
-		threadCount
+		threadCount,
+    notifyNodes
 	)
 	val config = ServerBuilder()
 		.codec(RichHttp[Request](Http()))
@@ -316,7 +346,6 @@ object Main extends App {
     .keepAlive(true)
     .hostConnectionMaxIdleTime(30.seconds)
 		.bindTo(new java.net.InetSocketAddress(port))
-
 
 	val server = config.build(ExceptionFilter andThen NewRelic andThen mainService)
 	logger.info(s"Listening on port: $port")
