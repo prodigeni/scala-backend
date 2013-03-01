@@ -83,24 +83,32 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 		logger.trace("Stopping scribe client")
 		scribe.close(deadline)
 	}
+  def cancelExpiredTask() {
+    expireWatchTask.map(task => {
+      task.cancel()
+      nextExpireDate = None
+      expireWatchTask = None
+      logger.debug("Old expire task cancelled")
+    })
+  }
 	def watchExpired() {
 		val minDates = rules.values.flatMap(ruleSystem => ruleSystem.expiring.headOption.map(rule => rule.expires.get))
-		expireWatchTask.map(task => {
-			logger.debug("Old expire task cancelled")
-			task.cancel()
-		})
 		if (minDates.isEmpty) {
-			nextExpireDate = None
-			expireWatchTask = None
+      cancelExpiredTask()
 			logger.debug("Expire task not required")
 		} else {
-			nextExpireDate = Some(minDates.min + 1.microsecond)
-			logger.debug(s"Scheduling expire task at ${nextExpireDate.get}")
-			expireWatchTask = Some(timer.schedule(nextExpireDate.get) { expire() })
+      val expireDate = Some(minDates.min + 1.second)
+      if (nextExpireDate != expireDate) {
+        cancelExpiredTask()
+        logger.debug(s"Scheduling expire task at ${nextExpireDate.get}")
+        nextExpireDate = expireDate
+        expireWatchTask = Some(timer.schedule(nextExpireDate.get) { expire() })
+      }
 		}
 	}
 	def expire() {
 		expireWatchTask = None
+    nextExpireDate = None
 		val expired = expiredRules
 		logger.debug(s"Performing expire task - expired rule count: ${expired.size}")
 		if (expired.isEmpty) watchExpired() else refreshRules(expired)
