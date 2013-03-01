@@ -62,6 +62,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
         .codec(Http())
         .hosts(new java.net.InetSocketAddress(node, 4666)) // TODO: port hardcoded for now
         .hostConnectionLimit(1)
+        .daemon(true)
         .build()
       logger.info(s"Created client for cluster node notifications: $node")
       (node, client)
@@ -73,6 +74,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 	val futurePool = if (threadPoolSize <= 0) {FuturePool.immediatePool} else {
 		FuturePool(java.util.concurrent.Executors.newFixedThreadPool(threadPoolSize, new NamedPoolThreadFactory("MainService pool")))
 	}
+  val reloadPool = FuturePool(java.util.concurrent.Executors.newSingleThreadExecutor())
 	watchExpired()
 
 	override def close(deadline: Time) = {
@@ -127,8 +129,9 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
     val responses = notifyMap.map( (pair) => {
       val (node, client) = pair
       // Issue a request, get a response:
-      val response = client(request)
-      response.onFailure( (exc) => logger.exception(s"Could not notify node $node", exc))
+      client(request).within(timer, 10.seconds)
+      .onFailure( (exc) => logger.exception(s"Could not notify node $node", exc))
+      .onSuccess( (x) => logger.debug(s"Notify response from $node: $x"))
     })
     Future.join(responses.toSeq)
   }
@@ -193,8 +196,8 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 			case "match" => futurePool(ParsedRequest(request).matchResponse)
 			case "check" => futurePool(ParsedRequest(request).checkResponse)
 			case "validate" => futurePool(validateRegex(request))
-			case "reload" => futurePool(reload(request, false))
-      case "notify" => futurePool(reload(request, true))
+			case "reload" => reloadPool(reload(request, false))
+      case "notify" => reloadPool(reload(request, true))
 			case "stats" => futurePool(stats(request))
 			case "view" => futurePool(viewRule(request))
 			case x => {
