@@ -100,9 +100,9 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
       val expireDate = Some(minDates.min + 1.second)
       if (nextExpireDate != expireDate) {
         cancelExpiredTask()
-        logger.debug(s"Scheduling expire task at ${nextExpireDate.get}")
         nextExpireDate = expireDate
         expireWatchTask = Some(timer.schedule(nextExpireDate.get) { expire() })
+        logger.debug(s"Scheduling expire task at ${nextExpireDate.get}")
       }
 		}
 	}
