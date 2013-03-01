@@ -56,7 +56,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 	var expireWatchTask: Option[TimerTask] = None
   val notifyMap = {
     val hostname = java.net.InetAddress.getLocalHost.getHostName
-    logger.info(s"Local hostname: $hostname")
+    logger.debug(s"Local hostname: $hostname")
     notifyNodes.filterNot(x => x == hostname).map( node => {
       val client = ClientBuilder()
         .codec(Http())
@@ -131,16 +131,18 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
       // Issue a request, get a response:
       client(request).within(timer, 10.seconds)
       .onFailure( (exc) => logger.exception(s"Could not notify node $node", exc))
-      .onSuccess( (x) => logger.debug(s"Notify response from $node: $x"))
+      .onSuccess( (x) => x.getStatus.getCode match {
+        case HttpResponseStatus.OK => ()
+        case _ => logger.debug(s"Notify response from $node: $x")
+        })
     })
     Future.join(responses.toSeq)
   }
 	def reload(request: Request, notify: Boolean) = {
 		val changed = request.getParams("changed").mkString(",").split(',').toSeq.filter(_ != "") // support both multiple and comma-separated params
 		val ids = if (changed.isEmpty) Seq.empty[Int] else changed.map(_.toInt)
-    val notified = if (notify) sendNotify(ids) else Future.Done
     refreshRules(ids)
-    notified()
+    if (notify) sendNotify(ids)(20.seconds)
     Respond.ok
 	}
 	def stats(request: Request): Response = Respond(statsString)
@@ -196,8 +198,8 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 			case "match" => futurePool(ParsedRequest(request).matchResponse)
 			case "check" => futurePool(ParsedRequest(request).checkResponse)
 			case "validate" => futurePool(validateRegex(request))
-			case "reload" => reloadPool(reload(request, false))
-      case "notify" => reloadPool(reload(request, true))
+			case "reload" => reloadPool(reload(request, true))
+      case "notify" => reloadPool(reload(request, false))
 			case "stats" => futurePool(stats(request))
 			case "view" => futurePool(viewRule(request))
 			case x => {
