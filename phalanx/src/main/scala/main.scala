@@ -186,11 +186,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 	}
 	def stripPath(request: Request): String = {
 		val requestPath = request.path
-		logger.debug {
-			val params = request.params.iterator.map((p) => s"${p._1}=${p._2}").toSeq.sorted.mkString(" ")
-			s"${request.remoteHost} $requestPath $params"
-		}
-		(if (requestPath.startsWith("http://")) {
+		val result = (if (requestPath.startsWith("http://")) {
 			val afterPrefix = requestPath.substring("http://".length)
 			afterPrefix.indexOf('/') match {
 				case -1 => ""
@@ -199,7 +195,13 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 		} else {
 			requestPath.stripPrefix("/")
 		}).stripSuffix("/") // get rid of '/' at the end too
-	}
+    if (result != "") logger.debug {
+      val params = request.params.iterator.map((p) => s"${p._1}=${p._2}").toSeq.sorted.mkString(" ")
+      s"${request.remoteHost} $requestPath $params"
+    }
+    result
+  }
+
 	def apply(request: Request): Future[Response] = {
 		stripPath(request) match {
 			case "" => Future(Respond("PHALANX ALIVE"))
