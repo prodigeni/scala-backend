@@ -138,19 +138,19 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
       val (node, client) = pair
       // Issue a request, get a response:
       client(request).within(timer, 10.seconds)
-      .onFailure( (exc) => logger.exception(s"Could not notify node $node", exc))
+      .onFailure( (exc) => logger.debug(s"Could not notify node $node: $exc"))
       .onSuccess( (x) => x.getStatus.getCode match {
-        case HttpResponseStatus.OK => ()
+        case 200 => ()
         case _ => logger.debug(s"Notify response from $node: $x")
         })
     })
-    Future.join(responses.toSeq)
+    Future.join(responses.toSeq).within(timer, 20.seconds)
   }
 	def reload(request: Request, notify: Boolean) = {
 		val changed = request.getParams("changed").mkString(",").split(',').toSeq.filter(_ != "") // support both multiple and comma-separated params
 		val ids = if (changed.isEmpty) Seq.empty[Int] else changed.map(_.toInt)
     refreshRules(ids)
-    if (notify) sendNotify(ids)(20.seconds)
+    if (notify) sendNotify(ids).onFailure( (exc) => logger.warn("Could not notify all nodes due to timeout."))
     Respond.ok
 	}
 	def stats(request: Request): Response = Respond(statsString)
