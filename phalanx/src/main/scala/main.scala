@@ -144,13 +144,13 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
         case _ => logger.debug(s"Notify response from $node: $x")
         })
     })
-    Future.join(responses.toSeq).within(timer, 20.seconds)
+    Future.join(responses.toSeq)
   }
 	def reload(request: Request, notify: Boolean) = {
 		val changed = request.getParams("changed").mkString(",").split(',').toSeq.filter(_ != "") // support both multiple and comma-separated params
 		val ids = if (changed.isEmpty) Seq.empty[Int] else changed.map(_.toInt)
     refreshRules(ids)
-    if (notify) sendNotify(ids).onFailure( (exc) => logger.warn("Could not notify all nodes due to timeout."))
+    if (notify) sendNotify(ids).within(timer, 20.seconds).onFailure( (exc) => logger.warn(s"Could not notify all nodes due to $exc."))
     Respond.ok
 	}
 	def stats(request: Request): Response = Respond(statsString)
