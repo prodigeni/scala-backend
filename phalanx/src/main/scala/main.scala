@@ -129,6 +129,10 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 			Respond.ok
 		} catch {
 			case e: PatternSyntaxException => Respond.failure
+      case x: Throwable => {
+        logger.exception("Error in validateRegex: ", x)
+        Respond.failure
+      }
 		}
 		response
 	}
