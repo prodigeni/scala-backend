@@ -40,12 +40,13 @@ object Respond {
 		val jsonData = JSONObject(data.mapValues(x => x.toJSONObject))
 		Respond(jsonData.toString(JSONFormat.defaultFormatter), Status.Ok, Message.ContentTypeJson)
 	}
-
 	def error(info: String, status: HttpResponseStatus = Status.InternalServerError) = Respond(info + "\n", status)
 	val ok = Respond("ok\n")
 	val failure = Respond("failure\n")
-	val contentMissing = error("content parameter is missing")
-	val unknownType = error("Unknown type parameter")
+	val contentMissing = error("content parameter is missing", Status.BadRequest)
+	val unknownType = error("Unknown type parameter", Status.BadRequest)
+  val internalError = error("Internal server error")
+  val notFound = error("not found", Status.NotFound)
 }
 
 class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => Map[String, RuleSystem],
@@ -130,8 +131,8 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 		} catch {
 			case e: PatternSyntaxException => Respond.failure
       case x: Throwable => {
-        logger.exception("Error in validateRegex: ", x)
-        Respond.failure
+        logger.exception("Unexcepted error in validateRegex: ", x)
+        Respond.internalError
       }
 		}
 		response
@@ -218,7 +219,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 			case "view" => futurePool(viewRule(request))
 			case x => {
 				logger.warn("Unknown request path: " + request.path + " [ " + x.toString + " ] ")
-				Future(Respond.error("not found", Status.NotFound))
+				Future(Respond.notFound)
 			}
 		}
 	}
