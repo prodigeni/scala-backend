@@ -254,7 +254,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 			if (ruleSystems.isEmpty) Respond.unknownType else {
 				if (content.isEmpty) 	Respond.contentMissing	else {
 					val matches = findMatches(1)
-					logger.debug(s"check: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
+					logger.trace(s"check: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
 					if (matches.isEmpty) Respond.ok else Respond.failure
 				}
 			}
@@ -264,7 +264,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
         if (content.isEmpty) Respond.contentMissing	else {
 					val limit = request.params.getIntOrElse("limit", 1)
 					val matches = findMatches(limit)
-					logger.debug(s"match: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
+					logger.trace(s"match: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
 					Respond.json(matches)
 				}
 			}
