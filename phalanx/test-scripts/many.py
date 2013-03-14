@@ -9,7 +9,7 @@ from twisted.python import log
 
 numberOfRequests = int(os.environ.get('REQUESTS', 1000))
 concurrentRequests = int(os.environ.get('CONCURRENT', 100))
-baseUrl = os.environ.get('URL', "http://localhost:8080")
+baseUrl = os.environ.get('URL', "http://localhost:4666")
 
 def oneBatch(prev, ipList):
 	toDo, left = ipList[:concurrentRequests], ipList[concurrentRequests:]

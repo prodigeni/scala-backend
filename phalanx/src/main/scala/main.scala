@@ -15,6 +15,7 @@ import java.util.NoSuchElementException
 import java.util.regex.PatternSyntaxException
 import org.jboss.netty.handler.codec.http.HttpResponseStatus
 import util.parsing.json.{JSONObject, JSONArray, JSONFormat}
+import com.twitter.finagle.tracing.{TraceId, Record}
 
 class ExceptionLogger[Req, Rep](val logger: NiceLogger) extends SimpleFilter[Req, Rep] {
 	def this(loggerName: String) = this(NiceLogger(loggerName))
@@ -23,6 +24,18 @@ class ExceptionLogger[Req, Rep](val logger: NiceLogger) extends SimpleFilter[Req
 			logger.exception("Exception in service", exception)
 		})
 	}
+}
+
+class Tracer(val logger:NiceLogger) extends com.twitter.finagle.tracing.Tracer {
+  def record(record: Record) {
+    logger.trace(record.toString())
+  }
+
+  def sampleTrace(traceId: TraceId): Option[Boolean] = Some(true)
+}
+
+object Tracer {
+  def apply(logger: NiceLogger) = if (logger.logger.isTraceEnabled) new Tracer(logger) else com.twitter.finagle.tracing.NullTracer
 }
 
 object Respond {
@@ -359,13 +372,16 @@ object Main extends App {
 	val config = ServerBuilder()
 		.codec(RichHttp[Request](Http()))
 		.name("Phalanx")
-		.maxConcurrentRequests(Seq(20, mainService.threadPoolSize).max)
+		.maxConcurrentRequests(Seq(1, mainService.threadPoolSize).max)
 		.sendBufferSize(1024)
-		.recvBufferSize(32*1024)
-		.backlog(100)
+		.recvBufferSize(256*1024)
+    .cancelOnHangup(false)
+		.backlog(200)
+    .tracer(Tracer(logger))
     .keepAlive(true)
     .hostConnectionMaxIdleTime(30.seconds)
 		.bindTo(new java.net.InetSocketAddress(port))
+
 
 	val server = config.build(ExceptionFilter andThen NewRelic andThen mainService)
 	logger.info(s"Listening on port: $port")
