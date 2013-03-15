@@ -14,7 +14,7 @@ except ImportError:
 
 numberOfRequests = int(os.environ.get('REQUESTS', 3000))
 concurrentRequests = int(os.environ.get('CONCURRENT', 10))
-dotProgress = int(os.environ.get('PROGRESS', 500))
+dotProgress = int(os.environ.get('PROGRESS', 100))
 baseUrl = os.environ.get('URL', "http://localhost:4666")
 
 class Dots:

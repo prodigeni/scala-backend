@@ -83,8 +83,8 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
     }).toMap
   }
 	val timer = com.twitter.finagle.util.DefaultTimer.twitter
-	//@transient var rules = reloader(Map.empty, Seq.empty)
-  var rules = reloader(Map.empty, Seq.empty)
+	@transient var rules = reloader(Map.empty, Seq.empty)
+  //var rules = reloader(Map.empty, Seq.empty)
 	val threadPoolSize = threadCount.getOrElse(Runtime.getRuntime.availableProcessors()*2)
 	val futurePool = if (threadPoolSize <= 0) {FuturePool.immediatePool} else {
 		FuturePool(java.util.concurrent.Executors.newFixedThreadPool(threadPoolSize, new NamedPoolThreadFactory("MainService pool")))
@@ -374,13 +374,13 @@ object Main extends App {
 	val config = ServerBuilder()
 		.codec(RichHttp[Request](Http()))
 		.name("Phalanx")
-    .maxConcurrentRequests(100)
+    .maxConcurrentRequests(600)
 		.sendBufferSize(64*1024)
-		.recvBufferSize(4*1024*1024)
+		.recvBufferSize(512*1024)
     .cancelOnHangup(false)
 		.backlog(1000)
     .keepAlive(true)
-    .hostConnectionMaxIdleTime(2.seconds)
+    .hostConnectionMaxIdleTime(3.seconds)
 		.bindTo(new java.net.InetSocketAddress(port))
 
 	val server = config.build(ExceptionFilter andThen NewRelic andThen mainService)
