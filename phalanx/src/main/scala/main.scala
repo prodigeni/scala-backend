@@ -16,6 +16,7 @@ import java.util.regex.PatternSyntaxException
 import org.jboss.netty.handler.codec.http.HttpResponseStatus
 import util.parsing.json.{JSONObject, JSONArray, JSONFormat}
 import com.twitter.finagle.tracing.{TraceId, Record}
+import collection.mutable
 
 class ExceptionLogger[Req, Rep](val logger: NiceLogger) extends SimpleFilter[Req, Rep] {
 	def this(loggerName: String) = this(NiceLogger(loggerName))
@@ -68,6 +69,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 	private val logger = NiceLogger("MainService")
 	var nextExpireDate: Option[Time] = None
 	var expireWatchTask: Option[TimerTask] = None
+  val userCache = new mutable.HashMap[String, Response] with mutable.SynchronizedMap[String, Response] // TODO: LRU?
   val notifyMap = {
     val hostname = java.net.InetAddress.getLocalHost.getHostName
     logger.debug(s"Local hostname: $hostname")
@@ -84,8 +86,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
   }
 	val timer = com.twitter.finagle.util.DefaultTimer.twitter
 	@transient var rules = reloader(Map.empty, Seq.empty)
-  //var rules = reloader(Map.empty, Seq.empty)
-	val threadPoolSize = threadCount.getOrElse(Runtime.getRuntime.availableProcessors()*2)
+	val threadPoolSize = threadCount.getOrElse(Runtime.getRuntime.availableProcessors())
 	val futurePool = if (threadPoolSize <= 0) {FuturePool.immediatePool} else {
 		FuturePool(java.util.concurrent.Executors.newFixedThreadPool(threadPoolSize, new NamedPoolThreadFactory("MainService pool")))
 	}
@@ -127,6 +128,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 		val expired = expiredRules
 		logger.debug(s"Performing expire task - expired rule count: ${expired.size}")
 		if (expired.isEmpty) watchExpired() else refreshRules(expired)
+    userCache.clear()
 	}
 	def expiredRules = {
 		val now = Time.now
@@ -238,7 +240,9 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 		}
 	}
 
-	case class ParsedRequest(request: Request) {
+
+
+  case class ParsedRequest(request: Request) {
 		val params = request.params
 		val lang = params.get("lang") match {
 			case None => "en"
@@ -257,6 +261,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 			}
 		}
 		val combinations: Iterable[(RuleSystem, Checkable)] = (for (r <- ruleSystems;c <- content) yield (r, c))
+    val cachable:Option[String] = if (checkTypes.size==1 && checkTypes.head == "user") Some(params.getAll("content").mkString("|")) else None
 
 		def findMatches(limit: Int): Seq[DatabaseRuleInfo] = {
 			val matches = combinations.view.flatMap((pair: (RuleSystem, Checkable)) => pair._1.allMatches(pair._2))
@@ -273,13 +278,20 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 				}
 			}
 		}
+
 		def matchResponse = {
 			if (ruleSystems.isEmpty) Respond.unknownType else {
         if (content.isEmpty) Respond.contentMissing	else {
 					val limit = request.params.getIntOrElse("limit", 1)
-					val matches = findMatches(limit)
-					logger.trace(s"match: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
-					Respond.json(matches)
+          if (limit == 1 && cachable.isDefined && userCache.contains(cachable.get)) {
+            userCache(cachable.get)
+          } else {
+            val matches = findMatches(limit)
+            logger.trace(s"match: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
+            val response = Respond.json(matches)
+            if (limit == 1 && cachable.isDefined) userCache(cachable.get) = response
+            response
+          }
 				}
 			}
 		}
@@ -377,7 +389,7 @@ object Main extends App {
     .maxConcurrentRequests(600)
 		.sendBufferSize(64*1024)
 		.recvBufferSize(512*1024)
-    .cancelOnHangup(false)
+    .cancelOnHangup(true)
 		.backlog(1000)
     .keepAlive(true)
     .hostConnectionMaxIdleTime(3.seconds)

@@ -52,7 +52,11 @@ def oneBatch(prev, ipList):
 		reactor.stop()
 
 if __name__ == '__main__':
-	allIps = ["%d.%d.%d.%d" % tuple([randint(1,255) for i in range(0,4)]) for j in range(0, numberOfRequests) ] # `numberOfRequests` random IPs
+	if os.environ.get('NORANDOM'):
+		allIps = ["100.100.100.100" for j in range(0, numberOfRequests) ] # `numberOfRequests` same IPs
+		print "Same requests"
+	else:
+		allIps = ["%d.%d.%d.%d" % tuple([randint(1,255) for i in range(0,4)]) for j in range(0, numberOfRequests) ] # `numberOfRequests` random IPs
 	startTime = time()
 	reactor.callWhenRunning(oneBatch, 0, allIps)
 	reactor.run()
