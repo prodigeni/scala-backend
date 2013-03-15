@@ -2,7 +2,7 @@ package com.wikia.phalanx
 
 import scala.slick.driver.MySQLDriver.simple._
 
-object RuleSystemLoader {
+abstract class RuleSystemLoader {
 	case class PhalanxRecord(id:Int, pcase:Int, exact:Int, regex:Int, author:Int, ptype:Int, textBlob:Array[Byte],
 		reasonBlob:Array[Byte], expireText:Option[String], lang:Option[String]) {
 		def text = new String(textBlob, "UTF-8")
@@ -91,8 +91,9 @@ object RuleSystemLoader {
 	def fromDatabase(db:Database):Map[String, RuleSystem] = {
 		val rows = dbRows(db, None)
 		val (result, _) = createRules(rows)
-		result.transform((_, rules) => new CombinedRuleSystem(rules))
+		result.transform((_, rules) => createRuleSystem(rules))
 	}
+  def createRuleSystem(rules:Iterable[DatabaseRule]):RuleSystem
 	def reloadSome(db:Database, oldMap:Map[String, RuleSystem], changedIds:Set[Int]):Map[String, RuleSystem] = {
 		if (changedIds.isEmpty) {
 			// no info, let's do a full reload
@@ -107,6 +108,14 @@ object RuleSystemLoader {
 			oldMap.transform((key, rs) => rs.reloadRules(result(key), deletedIds))
 		}
 	}
+}
+
+object CombinedLoader extends RuleSystemLoader {
+  def createRuleSystem(rules:Iterable[DatabaseRule]):RuleSystem = new CombinedRuleSystem(rules)
+}
+
+object FlatLoader extends RuleSystemLoader {
+  def createRuleSystem(rules:Iterable[DatabaseRule]):RuleSystem = new FlatRuleSystem(rules)
 }
 
 

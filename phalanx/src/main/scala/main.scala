@@ -83,8 +83,9 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
     }).toMap
   }
 	val timer = com.twitter.finagle.util.DefaultTimer.twitter
-	@transient var rules = reloader(Map.empty, Seq.empty)
-	val threadPoolSize = threadCount.getOrElse(Runtime.getRuntime.availableProcessors())
+	//@transient var rules = reloader(Map.empty, Seq.empty)
+  var rules = reloader(Map.empty, Seq.empty)
+	val threadPoolSize = threadCount.getOrElse(Runtime.getRuntime.availableProcessors()*2)
 	val futurePool = if (threadPoolSize <= 0) {FuturePool.immediatePool} else {
 		FuturePool(java.util.concurrent.Executors.newFixedThreadPool(threadPoolSize, new NamedPoolThreadFactory("MainService pool")))
 	}
@@ -363,8 +364,9 @@ object Main extends App {
   logger.info("Connecting to database from configuration file " + database.config.sourcePath)
 	val dbSession = database.connect()
   logger.info("Loading rules from database")
+  val loader:RuleSystemLoader = CombinedLoader
 	val mainService = new MainService(
-		(old, changed) => RuleSystemLoader.reloadSome(dbSession, old, changed.toSet),
+		(old, changed) => loader.reloadSome(dbSession, old, changed.toSet),
 		new ExceptionLogger(logger) andThen scribe,
 		threadCount,
     notifyNodes
@@ -372,16 +374,14 @@ object Main extends App {
 	val config = ServerBuilder()
 		.codec(RichHttp[Request](Http()))
 		.name("Phalanx")
-		.maxConcurrentRequests(Seq(1, mainService.threadPoolSize).max)
-		.sendBufferSize(1024)
-		.recvBufferSize(256*1024)
+    .maxConcurrentRequests(100)
+		.sendBufferSize(64*1024)
+		.recvBufferSize(4*1024*1024)
     .cancelOnHangup(false)
-		.backlog(200)
-    .tracer(Tracer(logger))
+		.backlog(1000)
     .keepAlive(true)
-    .hostConnectionMaxIdleTime(30.seconds)
+    .hostConnectionMaxIdleTime(2.seconds)
 		.bindTo(new java.net.InetSocketAddress(port))
-
 
 	val server = config.build(ExceptionFilter andThen NewRelic andThen mainService)
 	logger.info(s"Listening on port: $port")
