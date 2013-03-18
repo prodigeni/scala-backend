@@ -2,15 +2,13 @@ package com.wikia.phalanx
 
 import collection.mutable
 import com.twitter.util.Time
-import java.util.regex.Pattern
 import util.parsing.json.JSONObject
-import java.util.regex.PatternSyntaxException
 
 class RuleViolation(val rules: Iterable[DatabaseRuleInfo]) extends Exception {
 	def ruleIds = rules.map(rule => rule.dbId)
 }
 
-class InvalidRegex extends Exception {
+class InvalidRegex(regex: String, inner: Throwable) extends Exception(regex, inner) {
 
 }
 
@@ -44,23 +42,24 @@ abstract sealed class Checker {
 
 case class ExactChecker(caseType: CaseType, text: String) extends Checker {
 	def isMatch(s: Checkable): Boolean = caseType(s) == text
-	def regexPattern = "(" + java.util.regex.Pattern.quote(text) + ")"
+	def regexPattern = "(" + text + ")" // TODO: quoting
 	override def toString = s"ExactChecker($caseType,$text)"
 	def description(long: Boolean = false): String = "exact phrase"
 }
 
 case class ContainsChecker(caseType: CaseType, text: String) extends Checker {
 	def isMatch(s: Checkable): Boolean = caseType(s).contains(text)
-	def regexPattern = ".*" + java.util.regex.Pattern.quote(text) + ".*"
+	def regexPattern = ".*" + text + ".*" // TODO: quoting
 	override def toString = s"ContainsChecker($caseType,$text)"
 	def description(long: Boolean = false): String = "contains"
 }
 
 case class RegexChecker(caseType: CaseType, text: String) extends Checker {
-	val regex = try {
-      Pattern.compile(text, if (caseType == CaseInsensitive) Pattern.UNICODE_CASE | Pattern.CASE_INSENSITIVE else 0)
+  private final val flags = jregex.REFlags.DOTALL | jregex.REFlags.UNICODE
+  val regex = try {
+    new jregex.Pattern(text, if (caseType == CaseInsensitive) flags | jregex.REFlags.IGNORE_CASE else flags)
   } catch {
-    case e: PatternSyntaxException => throw new InvalidRegex()
+    case e: Throwable => throw new InvalidRegex(text, e)
   }
 	def isMatch(s: Checkable): Boolean = regex.matcher(s.text).find()
 	// extract not required
