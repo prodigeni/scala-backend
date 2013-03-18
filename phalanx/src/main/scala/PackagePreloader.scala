@@ -26,11 +26,17 @@ object PackagePreloader {
 			val pattern: Regex = ("^("+prefixes.map(java.util.regex.Pattern.quote).mkString("|")+").*\\.class$").r
 			val path = location.toString.stripPrefix("file:")
 			val f = new java.io.File(path)
-			val jarZipFile = new ZipFile(f)
+      try {
+			  val jarZipFile = new ZipFile(f)
+
 			val entries = jarZipFile.entries.asScala.toStream
 			val filtered = entries.map(s => s.toString).map(s=>s.replace('/', '.')).flatMap(pattern.findFirstIn _)
 			val result = filtered.map(x => Class.forName(x.stripSuffix(".class")))
 			result.force.toSet
+      } catch {
+        case e: java.util.zip.ZipException => Set.empty
+        case x: Throwable => throw x
+      }
 		}
 		else Set.empty
 	}
