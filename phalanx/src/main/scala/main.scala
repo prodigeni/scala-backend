@@ -12,10 +12,8 @@ import com.twitter.util.{Future, Time, TimerTask, FuturePool}
 import com.wikia.wikifactory._
 import java.io.{FileInputStream, File}
 import java.util.NoSuchElementException
-import java.util.regex.PatternSyntaxException
 import org.jboss.netty.handler.codec.http.HttpResponseStatus
 import util.parsing.json.{JSONObject, JSONArray, JSONFormat}
-import com.twitter.finagle.tracing.{TraceId, Record}
 import collection.mutable
 
 class ExceptionLogger[Req, Rep](val logger: NiceLogger) extends SimpleFilter[Req, Rep] {
@@ -25,18 +23,6 @@ class ExceptionLogger[Req, Rep](val logger: NiceLogger) extends SimpleFilter[Req
 			logger.exception("Exception in service", exception)
 		})
 	}
-}
-
-class Tracer(val logger:NiceLogger) extends com.twitter.finagle.tracing.Tracer {
-  def record(record: Record) {
-    logger.trace(record.toString())
-  }
-
-  def sampleTrace(traceId: TraceId): Option[Boolean] = Some(true)
-}
-
-object Tracer {
-  def apply(logger: NiceLogger) = if (logger.logger.isTraceEnabled) new Tracer(logger) else com.twitter.finagle.tracing.NullTracer
 }
 
 object Respond {
@@ -142,10 +128,10 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 	def validateRegex(request: Request) = {
 		val s = request.params.getOrElse("regex", "")
 		val response = try {
-			s.r
+			new RegexChecker(CaseSensitive, s)
 			Respond.ok
 		} catch {
-			case e: PatternSyntaxException => Respond.failure
+			case e: InvalidRegex => Respond.failure
       case x: Throwable => {
         logger.exception("Unexcepted error in validateRegex: ", x)
         Respond.internalError
@@ -289,7 +275,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
             val matches = findMatches(limit)
             logger.trace(s"match: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
             val response = Respond.json(matches)
-            if (limit == 1 && cachable.isDefined) userCache(cachable.get) = response
+            //if (limit == 1 && cachable.isDefined) userCache(cachable.get) = response
             response
           }
 				}

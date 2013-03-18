@@ -82,7 +82,7 @@ abstract class RuleSystemLoader {
 				ids += rule.dbId
 			}
 			catch {
-				case e:java.util.regex.PatternSyntaxException => None
+				case e:InvalidRegex => None
 				case e:Throwable => throw e
 			}
 		}

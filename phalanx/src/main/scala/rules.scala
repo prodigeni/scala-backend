@@ -4,9 +4,14 @@ import collection.mutable
 import com.twitter.util.Time
 import java.util.regex.Pattern
 import util.parsing.json.JSONObject
+import java.util.regex.PatternSyntaxException
 
 class RuleViolation(val rules: Iterable[DatabaseRuleInfo]) extends Exception {
 	def ruleIds = rules.map(rule => rule.dbId)
+}
+
+class InvalidRegex extends Exception {
+
 }
 
 case class Checkable(text: String, language: String = "en") {
@@ -52,7 +57,11 @@ case class ContainsChecker(caseType: CaseType, text: String) extends Checker {
 }
 
 case class RegexChecker(caseType: CaseType, text: String) extends Checker {
-	val regex = Pattern.compile(text, if (caseType == CaseInsensitive) Pattern.UNICODE_CASE | Pattern.CASE_INSENSITIVE else 0)
+	val regex = try {
+      Pattern.compile(text, if (caseType == CaseInsensitive) Pattern.UNICODE_CASE | Pattern.CASE_INSENSITIVE else 0)
+  } catch {
+    case e: PatternSyntaxException => throw new InvalidRegex()
+  }
 	def isMatch(s: Checkable): Boolean = regex.matcher(s.text).find()
 	// extract not required
 	def regexPattern = "("+text+")"

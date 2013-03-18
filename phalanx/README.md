@@ -2,12 +2,20 @@
 
 ## Building
 * Use sbt (simple build tool)
-* "sbt assembly" to generate one JAR
+* "sbt assembly" to generate one JAR in deploy/phalanx-server.jar (will also run tests)
+```
+$ sbt assembly
+...Done packaging...
+```
 * Building requires wikifactory - will normally get it from our Maven repository
 
 ## Running
 * Use "sbt run" in dev,
 * or one JAR (above) in production "java -jar <jarname>"
+```
+$ java -jar deploy/phalanx-server.jar &
+...Listening on port: 4666
+```
 
 ## Tests
 * use sbt test for unittests
@@ -186,4 +194,10 @@ Examples:
 ```
 $ curl --silent "http://localhost:4666/view?id=100"
 {"user" : {"regex" : true, "expires" : "", "text" : "Josh Gray", "reason" : "vandalism on swfanon", "exact" : false, "caseSensitive" : false, "id" : 100, "language" : "", "authorId" : 8245, "type" : 8}}
+```
+
+
+```
+$ pkill -f "java -jar deploy/phalanx-server.jar"
+ERRCODE=-15
 ```
