@@ -133,7 +133,7 @@ p_id,p_type,p_exact,p_regex,p_case,"cast(p_text as CHAR(255))"
 340,8,0,1,0,"^Jek T. Porkins$"
 341,8,0,1,0,"^Sir Hagrid$"
 342,8,0,1,0,^HURR$
-343,8,0,1,0,"^(?-i)FRED BAUDER$"
+343,8,0,1,0,"^FRED BAUDER$"
 344,8,0,1,0,"^Ydissac Nosila$"
 345,8,0,1,0,Manticore.{2}
 346,8,0,1,0,"P[Ee][Tt][Ii][Tt][Ee] [Ff][Ll][Ee][Uu][Rr]"
@@ -175,7 +175,7 @@ p_id,p_type,p_exact,p_regex,p_case,"cast(p_text as CHAR(255))"
 467,8,0,1,0,"Rape My Penis"
 471,8,0,1,0,Boingerbox
 497,8,0,1,0,Clitoris
-503,8,0,1,0,^(?-i)WIkia$
+503,8,0,1,0,^WIkia$
 504,8,0,1,0,"WALRUS ANAL"
 505,8,0,1,0,"Anti-Vandal v2.0"
 509,8,0,1,0,CheckUser
