@@ -29,7 +29,7 @@ $ cd deploy; java -jar phalanx-server.jar &
 Responds with: `PHALANX ALIVE` to show that the server works.
 
 ```
-$ curl --silent "http://localhost:4666/"
+$ curl --silent --noproxy localhost "http://localhost:4666/"
 PHALANX ALIVE
 ```
 
@@ -46,17 +46,17 @@ Result will be either `ok\n` or `failure\n`
 Examples:
 
 ```
-$ curl --silent "http://localhost:4666/check?lang=en&type=content&content=hello"
+$ curl --silent --noproxy localhost "http://localhost:4666/check?lang=en&type=content&content=hello"
 ok
 ```
 
 ```
-$ curl --silent "http://localhost:4666/check?lang=en&type=karamba&content=hello"
+$ curl --silent --noproxy localhost "http://localhost:4666/check?lang=en&type=karamba&content=hello"
 Unknown type parameter
 ```
 
 ```
-$ curl --silent "http://localhost:4666/check?lang=en&type=content&content=pornhub.com"
+$ curl --silent --noproxy localhost "http://localhost:4666/check?lang=en&type=content&content=pornhub.com"
 failure
 ```
 
@@ -66,17 +66,17 @@ Paremeters are the same as for `/check`, but results will be a json list (potent
 Each rule info is a JSON dictionary with following keys: id, text, reason, caseSensitive, exact, regex, language, expires, authorId
 
 ```
-$ curl --silent "http://localhost:4666/match?lang=en&type=content&content=hello"
+$ curl --silent --noproxy localhost "http://localhost:4666/match?lang=en&type=content&content=hello"
 []
 ```
 
 ```
-$ curl --silent "http://localhost:4666/match?lang=en&type=karamba&content=hello"
+$ curl --silent --noproxy localhost "http://localhost:4666/match?lang=en&type=karamba&content=hello"
 Unknown type parameter
 ```
 
 ```
-$ curl --silent "http://localhost:4666/match?lang=en&type=content&content=pornhub.com"
+$ curl --silent --noproxy localhost "http://localhost:4666/match?lang=en&type=content&content=pornhub.com"
 [{"regex" : true, "expires" : "", "text" : "pornhub\\.com", "reason" : "SpamRegex initial import", "exact" : false, "caseSensitive" : false, "id" : 4009, "language" : "", "authorId" : 184532, "type" : 1}]
 ```
 
@@ -88,12 +88,12 @@ Result will be either `ok\n` or `failure\n`
 Examples:
 
 ```
-$ curl --silent "http://localhost:4666/validate?regex=^alamakota$"
+$ curl --silent --noproxy localhost "http://localhost:4666/validate?regex=^alamakota$"
 ok
 ```
 
 ```
-$ curl --silent "http://localhost:4666/validate?regex=^alama(((kota$"
+$ curl --silent --noproxy localhost "http://localhost:4666/validate?regex=^alama(((kota$"
 failure
 ```
 
@@ -103,7 +103,7 @@ If not given, full reload will be done.
 Notifies other nodes (node names should be in property com.wikia.phalanx.notifynodes)
 
 ```
-$ curl --silent "http://localhost:4666/reload?changed=1,2,3"
+$ curl --silent --noproxy localhost "http://localhost:4666/reload?changed=1,2,3"
 ok
 ```
 
@@ -111,7 +111,7 @@ ok
 Same as reload, but does not notify other nodes in the cluster.
 
 ```
-$ curl --silent "http://localhost:4666/notify?changed=1,2,3"
+$ curl --silent --noproxy localhost "http://localhost:4666/notify?changed=1,2,3"
 ok
 ```
 
@@ -121,7 +121,7 @@ Show some text info about currenty loaded rules.
 
 Example:
 
-`$ curl --silent "http://localhost:4666/stats"`
+`$ curl --silent --noproxy localhost "http://localhost:4666/stats"`
 
     email:
       CombinedRuleSystem with total 75 rules and 3 checkers
@@ -192,7 +192,7 @@ Useful for debugging issues with reloading and matching.
 Examples:
 
 ```
-$ curl --silent "http://localhost:4666/view?id=100"
+$ curl --silent --noproxy localhost "http://localhost:4666/view?id=100"
 {"user" : {"regex" : true, "expires" : "", "text" : "Josh Gray", "reason" : "vandalism on swfanon", "exact" : false, "caseSensitive" : false, "id" : 100, "language" : "", "authorId" : 8245, "type" : 8}}
 ```
 
