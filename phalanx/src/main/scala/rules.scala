@@ -40,16 +40,21 @@ abstract sealed class Checker {
 	def description(long: Boolean = false): String
 }
 
+object Checker {
+  private final val regexSpecials = "\\[].*+{}^$|?"
+  def quoteToRegexp(text: String) = text.map(c => if (regexSpecials.contains(c)) "\\"+c else c).mkString
+}
+
 case class ExactChecker(caseType: CaseType, text: String) extends Checker {
 	def isMatch(s: Checkable): Boolean = caseType(s) == text
-	def regexPattern = "(" + text + ")" // TODO: quoting
+	def regexPattern = "(" + Checker.quoteToRegexp(text) + ")"
 	override def toString = s"ExactChecker($caseType,$text)"
 	def description(long: Boolean = false): String = "exact phrase"
 }
 
 case class ContainsChecker(caseType: CaseType, text: String) extends Checker {
 	def isMatch(s: Checkable): Boolean = caseType(s).contains(text)
-	def regexPattern = ".*" + text + ".*" // TODO: quoting
+	def regexPattern = ".*" + Checker.quoteToRegexp(text) + ".*"
 	override def toString = s"ContainsChecker($caseType,$text)"
 	def description(long: Boolean = false): String = "contains"
 }
@@ -71,7 +76,7 @@ case class RegexChecker(caseType: CaseType, text: String) extends Checker {
 case class SetExactChecker(caseType: CaseType, origTexts: Iterable[String]) extends Checker {
 	val texts = if (caseType == CaseSensitive) origTexts.toSet else origTexts.map(s => s.toLowerCase).toSet
 	def isMatch(s: Checkable): Boolean = texts.contains(caseType(s))
-	def regexPattern = texts.map(java.util.regex.Pattern.quote).mkString("|")
+	def regexPattern = texts.map(Checker.quoteToRegexp).mkString("|")
 	override def toString = "SetExactChecker(" + texts.size + ")"
 	def description(long: Boolean = false): String = "exact set of " + texts.size + " phrases"
 }
