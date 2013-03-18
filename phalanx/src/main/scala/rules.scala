@@ -60,9 +60,13 @@ case class ContainsChecker(caseType: CaseType, text: String) extends Checker {
 }
 
 case class RegexChecker(caseType: CaseType, text: String) extends Checker {
-  private final val flags = jregex.REFlags.DOTALL | jregex.REFlags.UNICODE
+  import java.util.regex.Pattern
+  private final val flags = Map(
+    CaseSensitive → (Pattern.DOTALL | Pattern.UNICODE_CASE),
+    CaseInsensitive → (Pattern.DOTALL | Pattern.UNICODE_CASE | Pattern.CASE_INSENSITIVE)
+  )
   val regex = try {
-    new jregex.Pattern(text, if (caseType == CaseInsensitive) flags | jregex.REFlags.IGNORE_CASE else flags)
+    Pattern.compile(text, flags(caseType))
   } catch {
     case e: Throwable => throw new InvalidRegex(text, e)
   }
