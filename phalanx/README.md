@@ -13,7 +13,7 @@ $ sbt assembly
 * Use "sbt run" in dev,
 * or one JAR (above) in production "java -jar <jarname>"
 ```
-$ java -jar deploy/phalanx-server.jar &
+$ cd deploy; java -jar phalanx-server.jar &
 ...Listening on port: 4666
 ```
 
@@ -198,6 +198,6 @@ $ curl --silent "http://localhost:4666/view?id=100"
 
 
 ```
-$ pkill -f "java -jar deploy/phalanx-server.jar"
+$ pkill -f "java -jar phalanx-server.jar"
 ERRCODE=-15
 ```
