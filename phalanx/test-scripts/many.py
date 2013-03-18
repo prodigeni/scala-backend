@@ -12,7 +12,7 @@ except ImportError:
 	def mean(l):
 		return sum(l)/float(len(l)) # not the numerically good to way to do it, but let's try anyway...
 
-numberOfRequests = int(os.environ.get('REQUESTS', 3000))
+numberOfRequests = int(os.environ.get('REQUESTS', 5000))
 concurrentRequests = int(os.environ.get('CONCURRENT', 10))
 dotProgress = int(os.environ.get('PROGRESS', 100))
 baseUrl = os.environ.get('URL', "http://localhost:4666")
@@ -49,7 +49,11 @@ def oneBatch(prev, ipList):
 		d.addBoth(oneBatch, left)
 	else:
 		print "\n%d requests ended in empty match" % prev
-		reactor.stop()
+		d = getPage("%s/stats/avg" % (baseUrl, ))
+		@d.addCallback
+		def c2(time):
+			print "Average matching time in server: %s" % time
+			reactor.stop()
 
 if __name__ == '__main__':
 	if os.environ.get('NORANDOM'):

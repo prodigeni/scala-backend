@@ -72,6 +72,8 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
   }
 	val timer = com.twitter.finagle.util.DefaultTimer.twitter
 	@transient var rules = reloader(Map.empty, Seq.empty)
+  @transient var matchTime = 0.microsecond
+  @transient var matchCount = 0
 	val threadPoolSize = threadCount.getOrElse(Runtime.getRuntime.availableProcessors())
 	val futurePool = if (threadPoolSize <= 0) {FuturePool.immediatePool} else {
 		FuturePool(java.util.concurrent.Executors.newFixedThreadPool(threadPoolSize, new NamedPoolThreadFactory("MainService pool")))
@@ -175,10 +177,19 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 			"Max memory: " + sys.runtime.maxMemory().humanReadableByteCount,
 			"Free memory: " + sys.runtime.freeMemory().humanReadableByteCount,
 			"Total memory: " + sys.runtime.totalMemory().humanReadableByteCount,
+      "Total time spent matching: " + totalTimeString,
+      "Average time spent matching: "+ avgTimeString,
 			""
 		)).mkString("\n")
 		response
 	}
+  def totalTime(request: Request): Response = Respond(totalTimeString)
+  def totalTimeString: String = matchTime.toString()
+  def avgTime(request: Request): Response = Respond(avgTimeString)
+  def avgTimeString: String = matchCount match {
+    case 0 => "unknown"
+    case x => (matchTime / x).inMicroseconds + " microseconds"
+  }
 	def viewRule(request: Request): Response = {
 		val id = request.params.getInt("id").get
 		val foundMap = rules.toSeq.map(p => {
@@ -217,6 +228,8 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 			case "validate" => futurePool(validateRegex(request))
 			case "reload" => reloadPool(reload(request, true))
       case "notify" => reloadPool(reload(request, false))
+      case "stats/total" => futurePool(totalTime(request))
+      case "stats/avg" => futurePool(avgTime(request))
 			case "stats" => futurePool(stats(request))
 			case "view" => futurePool(viewRule(request))
 			case x => {
@@ -251,7 +264,11 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 
 		def findMatches(limit: Int): Seq[DatabaseRuleInfo] = {
 			val matches = combinations.view.flatMap((pair: (RuleSystem, Checkable)) => pair._1.allMatches(pair._2))
+      val elapsed = com.twitter.util.Stopwatch.start()
 			val result: Iterable[DatabaseRuleInfo] = (if (limit > 0) matches.take(limit).force else matches.force)
+      val duration = elapsed()
+      matchTime += duration
+      matchCount += 1
 			result.headOption.map(sendToScribe(_))
 			result.toSeq
 		}
