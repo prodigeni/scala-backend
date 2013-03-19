@@ -86,7 +86,7 @@ object InvalidRegex {
   private val logger = NiceLogger("InvalidRegex")
   def checkForError(regex: String):Option[String] = try {
     regex.r
-    None
+    if (regex.contains("(?!")) Some("Invalid perl operator (?!") else None
   } catch {
     case e: java.util.regex.PatternSyntaxException => Some(e.getMessage)
     case e: Throwable => {
@@ -112,13 +112,19 @@ object Checker {
     val exactCi: func = texts => Seq(SetExactChecker(CaseInsensitive, texts.map(_.text)))
     val regexPattern:PartialFunction[Checker, String] = (checker:Checker) => checker match {
       case cc:ContainsChecker => cc.regexPattern
+      case cc:CIJavaRegexChecker if (InvalidRegex.checkForError(cc.text) == None) => cc.text
+      case cc:CSJavaRegexChecker if (InvalidRegex.checkForError(cc.text) == None) => cc.text
     }
     val containsCs: func = texts => Seq(regex(CaseSensitive, texts.collect(regexPattern).mkString("|") ))
     val containsCi: func = texts => Seq(regex(CaseInsensitive, texts.collect(regexPattern).mkString("|") ))
+    val regexCS: func = texts => Seq(regex(CaseSensitive, texts.collect(regexPattern).mkString("|") ))
+    val regexCI: func = texts => Seq(regex(CaseInsensitive, texts.collect(regexPattern).mkString("|") ))
     val others: func = texts => texts
     checkers.groupBy(checker => checker match {
         case c: ExactChecker => if (checker.caseType == CaseSensitive) exactCs else exactCi
         case c: ContainsChecker => if (checker.caseType == CaseSensitive) containsCs else containsCi
+        case c: CIJavaRegexChecker => regexCI
+        case c: CSJavaRegexChecker => regexCS
         case c: Checker => others
     }).toSeq.map(pair => pair._1(pair._2)).flatten
   }

@@ -48,14 +48,16 @@ object Respond {
   val notFound = error("not found", Status.NotFound)
 }
 
+
 class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => Map[String, RuleSystem],
 	val scribe: Service[Map[String, Any], Unit], threadCount: Option[Int] = None, notifyNodes: Seq[String] = Seq.empty  ) extends Service[Request, Response] {
 	def this(initialRules: Map[String, RuleSystem], scribe: Service[Map[String, Any], Unit]) = this((_, _) => initialRules, scribe)
 	private val logger = NiceLogger("MainService")
 	var nextExpireDate: Option[Time] = None
 	var expireWatchTask: Option[TimerTask] = None
-  val userCacheSize = 16384 // TODO: configurable?
-  val userCache = new SynchronizedLruMap[String, Response](userCacheSize)
+  val userCacheSize = 8191 // TODO: configurable?
+  val stats = new StatsGatherer()
+  val userCache = new SynchronizedLruMap[String, Seq[DatabaseRuleInfo]](userCacheSize)
   val notifyMap = {
     val hostname = java.net.InetAddress.getLocalHost.getHostName
     logger.debug(s"Local hostname: $hostname")
@@ -72,9 +74,6 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
   }
 	val timer = com.twitter.finagle.util.DefaultTimer.twitter
 	@transient var rules = reloader(Map.empty, Seq.empty)
-  @transient var matchTime = 0.microsecond
-  @transient var matchCount = 0
-  @transient var cacheHits = 0
 	val threadPoolSize = threadCount.getOrElse(Runtime.getRuntime.availableProcessors())
 	val futurePool = if (threadPoolSize <= 0) {FuturePool.immediatePool} else {
 		FuturePool(java.util.concurrent.Executors.newFixedThreadPool(threadPoolSize, new NamedPoolThreadFactory("MainService pool")))
@@ -125,6 +124,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 	}
 	def refreshRules(expired: Traversable[Int]) {
 		rules = reloader(rules, expired).toMap
+    if (expired.isEmpty) stats.reset()
 		watchExpired()
 	}
 	type checkOrMatch = (Iterable[RuleSystem], Iterable[Checkable], Option[String], Option[Int]) => Response
@@ -156,7 +156,6 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
     if (notify) sendNotify(ids).within(timer, 20.seconds).onFailure( (exc) => logger.warn(s"Could not notify all nodes due to $exc."))
     Respond.ok
 	}
-	def stats(request: Request): Response = Respond(statsString)
 	def statsString: String = {
 		val response = (rules.toSeq.map(t => {
 			val (s, ruleSystem) = t
@@ -171,21 +170,11 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 			"Max memory: " + sys.runtime.maxMemory().humanReadableByteCount,
 			"Free memory: " + sys.runtime.freeMemory().humanReadableByteCount,
 			"Total memory: " + sys.runtime.totalMemory().humanReadableByteCount,
-      s"Total time spent matching: $totalTimeString",
-      s"Average time spent matching: $avgTimeString",
-      s"Matches done: $matchCount",
-      s"User cache hits: $cacheHits",
-			""
+			stats.toString,
+      s"User cache: ${userCache.size}/$userCacheSize"
 		)).mkString("\n")
 		response
 	}
-  def totalTime(request: Request): Response = Respond(totalTimeString)
-  def totalTimeString: String = matchTime.toString()
-  def avgTime(request: Request): Response = Respond(avgTimeString)
-  def avgTimeString: String = matchCount match {
-    case 0 => "unknown"
-    case x => (matchTime / x).inMicroseconds + " microseconds"
-  }
 	def viewRule(request: Request): Response = {
 		val id = request.params.getInt("id").get
 		val foundMap = rules.toSeq.map(p => {
@@ -224,9 +213,10 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 			case "validate" => futurePool(validateRegex(request))
 			case "reload" => reloadPool(reload(request, true))
       case "notify" => reloadPool(reload(request, false))
-      case "stats/total" => futurePool(totalTime(request))
-      case "stats/avg" => futurePool(avgTime(request))
-			case "stats" => futurePool(stats(request))
+      case "stats/total" => stats.pool(Respond(stats.totalTime))
+      case "stats/avg" => stats.pool(Respond(stats.avgTime))
+      case "stats/long" => stats.pool(Respond(stats.longStats))
+			case "stats" => stats.pool(Respond(statsString))
 			case "view" => futurePool(viewRule(request))
 			case x => {
 				logger.warn("Unknown request path: " + request.path + " [ " + x.toString + " ] ")
@@ -256,17 +246,30 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 			}
 		}
 		val combinations: Iterable[(RuleSystem, Checkable)] = (for (r <- ruleSystems;c <- content) yield (r, c))
-    val cachable:Option[String] = if (checkTypes.size==1 && checkTypes.head == "user") Some(params.getAll("content").mkString("|")) else None
+    val cacheable:Option[String] = checkTypes match {
+      case "user" :: Nil => Some(params.getAll("content").mkString("|"))
+      case _ => None
+    }
 
 		def findMatches(limit: Int): Seq[DatabaseRuleInfo] = {
-			val matches = combinations.view.flatMap((pair: (RuleSystem, Checkable)) => pair._1.allMatches(pair._2))
-      val elapsed = com.twitter.util.Stopwatch.start()
-			val result: Iterable[DatabaseRuleInfo] = (if (limit > 0) matches.take(limit).force else matches.force)
-      val duration = elapsed()
-      matchTime += duration
-      matchCount += 1
-			result.headOption.map(sendToScribe(_))
-			result.toSeq
+      cacheable match {
+        case Some(value) if (userCache.contains(value)) => {
+          stats.cacheHit()
+          userCache(value)
+        }
+        case _ => {
+          val elapsed = com.twitter.util.Stopwatch.start()
+          val matches = combinations.view.flatMap((pair: (RuleSystem, Checkable)) => pair._1.allMatches(pair._2))
+          val result: Seq[DatabaseRuleInfo] = (if (limit > 0) matches.take(limit).force else matches.force).toSeq
+          result.headOption.map(sendToScribe(_))
+          cacheable match {
+            case Some(value) => userCache(cacheable.get) = result
+            case _ => ()
+          }
+          stats.storeRequest(elapsed(), this)
+          result
+        }
+      }
 		}
 		def checkResponse = {
 			if (ruleSystems.isEmpty) Respond.unknownType else {
@@ -282,19 +285,11 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 			if (ruleSystems.isEmpty) Respond.unknownType else {
         if (content.isEmpty) Respond.contentMissing	else {
 					val limit = request.params.getIntOrElse("limit", 1)
-          cachable match {
-            case Some(value) if limit == 1 && userCache.contains(value) => {
-              cacheHits += 1
-              userCache(value)
-            }
-            case _ => {
-              val matches = findMatches(limit)
-              logger.trace(s"match: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
-              val response = Respond.json(matches)
-              if (limit == 1 && cachable.isDefined) userCache(cachable.get) = response
-              response
-            }
-          }
+          val matches = findMatches(limit)
+          logger.trace(s"match: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
+          val response = Respond.json(matches)
+
+          response
 				}
 			}
 		}
@@ -311,6 +306,61 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 			else Future.Done
 		}
 	}
+  class StatsGatherer {
+    case class LongRequest(duration:Duration, pr: ParsedRequest) {
+      override def toString:String = s"$duration ${pr.request.remoteHost} ${pr.request.path} ${pr.checkTypes} ${pr.content}"
+    }
+    implicit object LongRequestOrdering extends Ordering[LongRequest] {
+      def compare(a:LongRequest, b:LongRequest) = a.duration compare b.duration
+    }
+    val pool = FuturePool(java.util.concurrent.Executors.newSingleThreadExecutor())
+    private var matchTime = 0.microsecond
+    private var matchCount = 0
+    private var cacheHits = 0
+    private val longRequests = collection.mutable.SortedSet.empty[LongRequest]
+    private var longRequestThreshold = 0.microsecond
+    private val longRequestsMax = 5
+
+    def storeRequest(time: Duration, request: => ParsedRequest) {
+      pool( {
+        matchTime += time
+        matchCount += 1
+        if (time > longRequestThreshold) {
+          longRequests += LongRequest(time, request)
+          if (longRequests.size > longRequestsMax) longRequests -= longRequests.head
+          longRequestThreshold = longRequests.head.duration
+        }
+      })
+    }
+    def cacheHit() {
+      pool( {  cacheHits += 1 } )
+    }
+    def reset() {
+      pool( {
+        matchTime = 0.microsecond
+        matchCount = 0
+        cacheHits = 0
+        longRequests.clear()
+        longRequestThreshold = 0.microsecond
+      })
+    }
+    override def toString: String = Seq(
+      s"Total time spent matching: $totalTime",
+      s"Average time spent matching: $avgTime",
+      s"Matches done: $matchCount",
+      s"User cache hits: $cacheHits",
+      s"Cache hit %: ${if (matchCount+cacheHits>0) cacheHits*100/(matchCount+cacheHits) else "unknown"}",
+      s"Longest request time: ${longRequests.lastOption.map(_.duration.toString()).getOrElse("unknown")}"
+    ).mkString("\n")
+    def longStats:String = longRequests.map(_.toString).mkString("\n")
+    def totalTime:String = matchTime.toString()
+    def avgTime: String = matchCount match {
+      case 0 => "unknown"
+      case x => (matchTime / x).inMicroseconds + " microseconds"
+    }
+
+
+  }
 }
 
 object Main extends App {
