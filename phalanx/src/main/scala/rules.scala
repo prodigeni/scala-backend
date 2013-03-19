@@ -3,34 +3,18 @@ package com.wikia.phalanx
 import collection.mutable
 import com.twitter.util.Time
 import util.parsing.json.JSONObject
+import collection.parallel.immutable.ParSeq
 
 class RuleViolation(val rules: Iterable[DatabaseRuleInfo]) extends Exception {
 	def ruleIds = rules.map(rule => rule.dbId)
 }
 
-class InvalidRegex(regex: String, inner: Throwable) extends Exception(regex, inner) {
-
-}
-
-object InvalidRegex {
-  private val logger = NiceLogger("InvalidRegex")
-  def checkForError(regex: String):Option[String] = try {
-    regex.r
-    None
-  } catch {
-    case e: java.util.regex.PatternSyntaxException => Some(e.getMessage)
-    case e: Throwable => {
-      logger.exception(s"Unexpected error parsing regex '$regex'", e)
-      Some("Internal server error")
-    }
-  }
-}
 
 case class Checkable(text: String, language: String = "en") {
 	val lcText = text.toLowerCase
 }
 
-trait CaseType {
+sealed trait CaseType {
 	def apply(s: Checkable): String
 	def apply(s: String): String
 }
@@ -103,9 +87,9 @@ case class DatabaseRule(text: String, dbId: Int, reason: String, caseSensitive: 
                         language: Option[String], expires: Option[Time], authorId: Int, typeMask: Int) extends DatabaseRuleInfo with Rule {
 	val caseType = if (caseSensitive || DatabaseRuleInfo.letterPattern.findFirstIn(text).isEmpty) CaseSensitive else CaseInsensitive
 	val checker: Checker = {
-		if (regex) new RegexChecker(caseType, text)
+		if (regex) Checker.regex(caseType, text)
 		else {
-			if (exact) new ExactChecker(caseType, caseType(text)) else new ContainsChecker(caseType, caseType(text))
+			if (exact) Checker.exact(caseType, caseType(text)) else Checker.contains(caseType, caseType(text))
 		}
 	}
 	def allMatches(s: Checkable): Iterable[DatabaseRuleInfo] = if (isMatch(s)) Some(this) else None
@@ -155,34 +139,19 @@ class FlatRuleSystem(initialRules: Iterable[DatabaseRule]) extends RuleSystem {
 }
 
 class CombinedRuleSystem(initialRules: Iterable[DatabaseRule]) extends FlatRuleSystem(initialRules) {
+  type checkerSeq = ParSeq[Checker]
 	private val logger = NiceLogger("RuleSystem")
-	val checkers: Map[Option[String], Iterable[Checker]] = extractCheckers.withDefaultValue(Set.empty)
 
-	def extractCheckers: Map[Option[String], Iterable[Checker]] = {
-		type func = Iterable[DatabaseRule] => Checker
-		// using those functions as keys in the map "sets"
-		val exactCs: func = texts => new SetExactChecker(CaseSensitive, texts.map(rule => rule.text))
-		val exactCi: func = texts => new SetExactChecker(CaseInsensitive, texts.map(rule => rule.text))
-    val getRegexPattern:PartialFunction[Checker,String] = (checker:Checker) => checker match {
-      case c: ContainsChecker => c.regexPattern
-      case c: RegexChecker => c.regexPattern
-    }
-		val cs: func = texts => new RegexChecker(CaseSensitive, texts.map(_.checker).collect(getRegexPattern).mkString("|"))
-		val ci: func = texts => new RegexChecker(CaseInsensitive, texts.map(_.checker).collect(getRegexPattern).mkString("|"))
+	val checkers: Map[Option[String], checkerSeq] = extractCheckers.withDefaultValue(ParSeq.empty)
+
+	def extractCheckers: Map[Option[String], checkerSeq] = {
 		val groupedByLang = initialRules.groupBy(rule => rule.language)
-		def splitCase(rs: Iterable[DatabaseRule]) = {
-			rs.groupBy(rule => rule.checker match {
-				case c: ExactChecker => if (rule.caseType == CaseSensitive) exactCs else exactCi
-				case c: Checker => if (rule.caseType == CaseSensitive) cs else ci
-			}).toSeq.map(pair => pair._1(pair._2))
-		}
-		val result = for ((lang, rs) <- groupedByLang) yield (lang, splitCase(rs))
+		val result = for ((lang, rs) <- groupedByLang) yield (lang, Checker.combine(rs.map(_.checker)).toIndexedSeq.par)
 		result.toMap
 	}
 	override def copy(rules: Iterable[DatabaseRule]) = new CombinedRuleSystem(rules)
 	override def isMatch(s: Checkable): Boolean = {
-		val selected = checkers(None) ++ checkers(Some(s.language))
-		val result = selected.exists (x => x.isMatch(s))
+		val result = checkers(None).exists (_.isMatch(s)) || checkers(Some(s.language)).exists(_.isMatch(s))
 		logger.debug(s"isMatch result for $s: $result")
 		result
 	}
@@ -203,7 +172,7 @@ class CombinedRuleSystem(initialRules: Iterable[DatabaseRule]) extends FlatRuleS
 			text + statsPerCheckerType(checkers)
 		}).toSeq.sorted
 	}
-	override def statsSummary(c: Checker): String = c.description(long = true)
+	override def statsSummary(c: Checker): String = c.description(long = false)
 	override def stats: Iterable[String] = {
 		val checkerCount = checkers.values.map(t => t.size).sum
 		Seq((Seq("CombinedRuleSystem", "with", "total", rules.size, "rules", "and", checkerCount, "checkers").mkString(" "))) ++ ruleStats
