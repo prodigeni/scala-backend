@@ -184,6 +184,31 @@ Example:
       Case insensitive (de) : regex (8820 characters)
       Case sensitive (All langugages) : exact set of 4 phrases, regex (80 characters)
 
+    Next rule expire date: 2013-03-19 18:23:26 +0000
+    NewRelic environment: phalanx-production
+    Phalanx server version 0.20.0093b2ec192411e50262ac8b090c46bd9392ad35
+    Main worker threads: 16
+    Max memory: 474.9 MiB
+    Free memory: 386.7 MiB
+    Total memory: 474.9 MiB
+    Total time spent matching: 3.seconds+340.milliseconds+261.microseconds+397.nanoseconds
+    Average time spent matching: 668 microseconds
+    Matches done: 5000
+    User cache hits: 0
+    Cache hit %: 0
+    Longest request time: 118.milliseconds+56.microseconds+890.nanoseconds
+    User cache: 5000/8191
+
+
+### /stats/total
+Show total matching time since last full reload
+
+### /stats/avg
+Show average matching time for cache misses since last full reload
+
+### /stats/long
+Shows 5 longest requests since last full reload
+
 ### /view
 Checks current information about a rule. Id must be passed with id parameter.
 Result will be JSON with rule information.
