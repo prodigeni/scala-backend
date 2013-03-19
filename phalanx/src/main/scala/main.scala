@@ -129,17 +129,10 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 	type checkOrMatch = (Iterable[RuleSystem], Iterable[Checkable], Option[String], Option[Int]) => Response
 	def validateRegex(request: Request) = {
 		val s = request.params.getOrElse("regex", "")
-		val response = try {
-			new RegexChecker(CaseSensitive, s)
-			Respond.ok
-		} catch {
-			case e: InvalidRegex => Respond.failure
-      case x: Throwable => {
-        logger.exception("Unexcepted error in validateRegex: ", x)
-        Respond.internalError
-      }
-		}
-		response
+    InvalidRegex.checkForError(s) match {
+      case None => Respond.ok
+      case Some(error) => Respond.error(s"failure\n$error")
+    }
 	}
   def sendNotify(ids: Seq[Int]):Future[Unit] = {
     val request: Request = if (ids.isEmpty) Request("/notify") else Request("/notify", "changed" -> ids.mkString(","))

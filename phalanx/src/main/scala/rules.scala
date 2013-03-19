@@ -12,6 +12,20 @@ class InvalidRegex(regex: String, inner: Throwable) extends Exception(regex, inn
 
 }
 
+object InvalidRegex {
+  private val logger = NiceLogger("InvalidRegex")
+  def checkForError(regex: String):Option[String] = try {
+    regex.r
+    None
+  } catch {
+    case e: java.util.regex.PatternSyntaxException => Some(e.getMessage)
+    case e: Throwable => {
+      logger.exception(s"Unexpected error parsing regex '$regex'", e)
+      Some("Internal server error")
+    }
+  }
+}
+
 case class Checkable(text: String, language: String = "en") {
 	val lcText = text.toLowerCase
 }
@@ -35,55 +49,42 @@ object CaseInsensitive extends CaseType {
 
 abstract sealed class Checker {
 	def isMatch(s: Checkable): Boolean
-	def regexPattern: String
 	val caseType: CaseType
 	def description(long: Boolean = false): String
 }
 
-object Checker {
-  private final val regexSpecials = "\\[].*+{}^$|?"
-  def quoteToRegexp(text: String) = text.map(c => if (regexSpecials.contains(c)) "\\"+c else c).mkString
-}
-
 case class ExactChecker(caseType: CaseType, text: String) extends Checker {
 	def isMatch(s: Checkable): Boolean = caseType(s) == text
-	def regexPattern = "(" + Checker.quoteToRegexp(text) + ")"
 	override def toString = s"ExactChecker($caseType,$text)"
 	def description(long: Boolean = false): String = "exact phrase"
 }
 
 case class ContainsChecker(caseType: CaseType, text: String) extends Checker {
+  private final val regexSpecials = "\\[].*+{}^$|?()"
 	def isMatch(s: Checkable): Boolean = caseType(s).contains(text)
-	def regexPattern = ".*" + Checker.quoteToRegexp(text) + ".*"
+	def regexPattern = text.map(c => if (regexSpecials.contains(c)) "\\"+c else c).mkString
 	override def toString = s"ContainsChecker($caseType,$text)"
 	def description(long: Boolean = false): String = "contains"
 }
 
 
 case class RegexChecker(caseType: CaseType, text: String) extends Checker {
-  import monq.jfa.{Nfa, Dfa, DfaRun, CharSequenceCharSource, FaAction}
-  object MarkMatch extends FaAction {
-    def invoke(stringBuffer: java.lang.StringBuffer, i: Int, dfaRun: DfaRun) {
-      dfaRun.clientData = this
-    }
-    def mergeWith(faAction: FaAction ): FaAction = this
-  }
-
+  import com.logentries.re2.{RE2, Options}
+  def baseOptions = new Options().setNeverCapture(true).setMaxMem(64*1024*1024)
+  private final val flags = Map(
+   CaseSensitive -> baseOptions.setCaseSensitive(true),
+   CaseInsensitive -> baseOptions.setCaseSensitive(false)
+  )
   val regex = try {
-    var r = if (text.headOption == Some("^")) text.substring(1) else ".*"+text
-    r = if (r.lastOption == Some("$")) r.substring(0, r.size - 1) else r + ".*"
-    new Nfa(r, MarkMatch).compile(DfaRun.UNMATCHED_DROP)
+    new RE2(text, flags(caseType))
   } catch {
     case e: Throwable => throw new InvalidRegex(text, e)
   }
-	def isMatch(s: Checkable): Boolean = {
-    val run = new DfaRun(regex, new CharSequenceCharSource(text))
-    run.clientData = null
-    run.filter()
-    (run.clientData != null)
-  }
-	// extract not required
+	def isMatch(s: Checkable): Boolean = regex.partialMatch(s.text)
 	def regexPattern = "("+text+")"
+  override def finalize() {
+    regex.close() // supposedly required to release memory allocated in native library
+  }
 	override def toString = s"RegexChecker($caseType,$text)"
 	def description(long: Boolean = false): String = if (long) "regex (" + text.length + " characters)" else "regex"
 }
@@ -91,7 +92,6 @@ case class RegexChecker(caseType: CaseType, text: String) extends Checker {
 case class SetExactChecker(caseType: CaseType, origTexts: Iterable[String]) extends Checker {
 	val texts = if (caseType == CaseSensitive) origTexts.toSet else origTexts.map(s => s.toLowerCase).toSet
 	def isMatch(s: Checkable): Boolean = texts.contains(caseType(s))
-	def regexPattern = texts.map(Checker.quoteToRegexp).mkString("|")
 	override def toString = "SetExactChecker(" + texts.size + ")"
 	def description(long: Boolean = false): String = "exact set of " + texts.size + " phrases"
 }
@@ -211,8 +211,9 @@ class CombinedRuleSystem(initialRules: Iterable[DatabaseRule]) extends FlatRuleS
 		// using those functions as keys in the map "sets"
 		val exactCs: func = texts => new SetExactChecker(CaseSensitive, texts.map(rule => rule.text))
 		val exactCi: func = texts => new SetExactChecker(CaseInsensitive, texts.map(rule => rule.text))
-		val cs: func = texts => new RegexChecker(CaseSensitive, texts.map(rule => rule.checker.regexPattern).mkString("|"))
-		val ci: func = texts => new RegexChecker(CaseInsensitive, texts.map(rule => rule.checker.regexPattern).mkString("|"))
+    val getRegexPattern:PartialFunction[Checker,String] = (checker:Checker) => checker match { case c: ContainsChecker => c.regexPattern }
+		val cs: func = texts => new RegexChecker(CaseSensitive, texts.map(_.checker).collect(getRegexPattern).mkString("|"))
+		val ci: func = texts => new RegexChecker(CaseInsensitive, texts.map(_.checker).collect(getRegexPattern).mkString("|"))
 		val groupedByLang = initialRules.groupBy(rule => rule.language)
 		def splitCase(rs: Iterable[DatabaseRule]) = {
 			rs.groupBy(rule => rule.checker match {
