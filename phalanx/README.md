@@ -221,6 +221,7 @@ $ curl --silent --noproxy localhost "http://localhost:4666/view?id=100"
 {"user" : {"regex" : true, "expires" : "", "text" : "Josh Gray", "reason" : "vandalism on swfanon", "exact" : false, "caseSensitive" : false, "id" : 100, "language" : "", "authorId" : 8245, "type" : 8}}
 ```
 
+Kill server for doctests:
 
 ```
 $ pkill -f "java -jar phalanx-server.jar"
