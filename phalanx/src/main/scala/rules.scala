@@ -81,7 +81,7 @@ case class RegexChecker(caseType: CaseType, text: String) extends Checker {
     case e: Throwable => throw new InvalidRegex(text, e)
   }
 	def isMatch(s: Checkable): Boolean = regex.partialMatch(s.text)
-	def regexPattern = "("+text+")"
+	def regexPattern = text
   override def finalize() {
     regex.close() // supposedly required to release memory allocated in native library
   }
@@ -211,7 +211,10 @@ class CombinedRuleSystem(initialRules: Iterable[DatabaseRule]) extends FlatRuleS
 		// using those functions as keys in the map "sets"
 		val exactCs: func = texts => new SetExactChecker(CaseSensitive, texts.map(rule => rule.text))
 		val exactCi: func = texts => new SetExactChecker(CaseInsensitive, texts.map(rule => rule.text))
-    val getRegexPattern:PartialFunction[Checker,String] = (checker:Checker) => checker match { case c: ContainsChecker => c.regexPattern }
+    val getRegexPattern:PartialFunction[Checker,String] = (checker:Checker) => checker match {
+      case c: ContainsChecker => c.regexPattern
+      case c: RegexChecker => c.regexPattern
+    }
 		val cs: func = texts => new RegexChecker(CaseSensitive, texts.map(_.checker).collect(getRegexPattern).mkString("|"))
 		val ci: func = texts => new RegexChecker(CaseInsensitive, texts.map(_.checker).collect(getRegexPattern).mkString("|"))
 		val groupedByLang = initialRules.groupBy(rule => rule.language)

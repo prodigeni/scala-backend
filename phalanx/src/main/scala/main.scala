@@ -364,6 +364,7 @@ object Main extends App {
 		case s: String if (s != null && s.nonEmpty) => Some(s.toInt)
 		case _ => None
 	}
+  logger.info(s"Worker thread count: $threadCount")
   val notifyNodes = wikiaProp("notifynodes") match {
     case s: String if (s != null && s.nonEmpty) => s.split(' ').toSeq
     case _ => Seq.empty
