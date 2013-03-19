@@ -4,17 +4,16 @@ import collection.JavaConversions._
 import com.twitter.concurrent.NamedPoolThreadFactory
 import com.twitter.conversions.time._
 import com.twitter.finagle.builder.{ClientBuilder, ServerBuilder}
-import com.twitter.finagle.http.RichHttp
 import com.twitter.finagle.http.filter.ExceptionFilter
 import com.twitter.finagle.http.{Http, Request, Status, Version, Response, Message}
 import com.twitter.finagle.{SimpleFilter, Service}
-import com.twitter.util.{Future, Time, TimerTask, FuturePool}
+import com.twitter.util._
 import com.wikia.wikifactory._
 import java.io.{FileInputStream, File}
 import java.util.NoSuchElementException
 import org.jboss.netty.handler.codec.http.HttpResponseStatus
 import util.parsing.json.{JSONObject, JSONArray, JSONFormat}
-import collection.mutable
+import com.twitter.finagle.http.RichHttp
 
 class ExceptionLogger[Req, Rep](val logger: NiceLogger) extends SimpleFilter[Req, Rep] {
 	def this(loggerName: String) = this(NiceLogger(loggerName))
@@ -55,7 +54,8 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 	private val logger = NiceLogger("MainService")
 	var nextExpireDate: Option[Time] = None
 	var expireWatchTask: Option[TimerTask] = None
-  val userCache = new mutable.HashMap[String, Response] with mutable.SynchronizedMap[String, Response] // TODO: LRU?
+  val userCacheSize = 16384 // TODO: configurable?
+  val userCache = new SynchronizedLruMap[String, Response](userCacheSize)
   val notifyMap = {
     val hostname = java.net.InetAddress.getLocalHost.getHostName
     logger.debug(s"Local hostname: $hostname")
@@ -74,6 +74,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 	@transient var rules = reloader(Map.empty, Seq.empty)
   @transient var matchTime = 0.microsecond
   @transient var matchCount = 0
+  @transient var cacheHits = 0
 	val threadPoolSize = threadCount.getOrElse(Runtime.getRuntime.availableProcessors())
 	val futurePool = if (threadPoolSize <= 0) {FuturePool.immediatePool} else {
 		FuturePool(java.util.concurrent.Executors.newFixedThreadPool(threadPoolSize, new NamedPoolThreadFactory("MainService pool")))
@@ -166,12 +167,14 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 			++ sys.props.get("newrelic.environment").map("NewRelic environment: " + _)
 			++ Seq(
 			Main.versionString,
-			"Worker threads: " + threadPoolSize,
+			s"Main worker threads: $threadPoolSize",
 			"Max memory: " + sys.runtime.maxMemory().humanReadableByteCount,
 			"Free memory: " + sys.runtime.freeMemory().humanReadableByteCount,
 			"Total memory: " + sys.runtime.totalMemory().humanReadableByteCount,
-      "Total time spent matching: " + totalTimeString,
-      "Average time spent matching: "+ avgTimeString,
+      s"Total time spent matching: $totalTimeString",
+      s"Average time spent matching: $avgTimeString",
+      s"Matches done: $matchCount",
+      s"User cache hits: $cacheHits",
 			""
 		)).mkString("\n")
 		response
@@ -279,14 +282,18 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 			if (ruleSystems.isEmpty) Respond.unknownType else {
         if (content.isEmpty) Respond.contentMissing	else {
 					val limit = request.params.getIntOrElse("limit", 1)
-          if (limit == 1 && cachable.isDefined && userCache.contains(cachable.get)) {
-            userCache(cachable.get)
-          } else {
-            val matches = findMatches(limit)
-            logger.trace(s"match: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
-            val response = Respond.json(matches)
-            //if (limit == 1 && cachable.isDefined) userCache(cachable.get) = response
-            response
+          cachable match {
+            case Some(value) if limit == 1 && userCache.contains(value) => {
+              cacheHits += 1
+              userCache(value)
+            }
+            case _ => {
+              val matches = findMatches(limit)
+              logger.trace(s"match: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
+              val response = Respond.json(matches)
+              if (limit == 1 && cachable.isDefined) userCache(cachable.get) = response
+              response
+            }
           }
 				}
 			}

@@ -160,17 +160,18 @@ class CombinedRuleSystem(initialRules: Iterable[DatabaseRule]) extends FlatRuleS
 	}
 	override def combineRules: CombinedRuleSystem = this
 	override def ruleStats: Iterable[String] = {
-		val types = new mutable.HashMap[String, Set[Checker]]().withDefaultValue(Set.empty[Checker])
+		val types = new mutable.HashMap[String, List[Checker]]().withDefaultValue(Nil)
 		for ((lang, c) <- checkers) {
-			for (checker <- c) {
-				val text = (if (checker.caseType == CaseSensitive) "Case sensitive" else "Case insensitive") + " (" + lang.getOrElse("All langugages") + ") : "
-				types(text) = types(text) + checker
+			for (checker <- c.seq) {
+				val text = (if (checker.caseType == CaseSensitive) "Case sensitive" else "Case insensitive") + " (" + lang.getOrElse("All langugages") + ") "
+				types(text) = types(text).::(checker)
 			}
 		}
 		types.map(pair => {
 			val (text, checkers) = pair
-			text + statsPerCheckerType(checkers)
-		}).toSeq.sorted
+      val c = checkers.toIndexedSeq
+			text + s"[${c.size} checkers]: " + statsPerCheckerType(checkers)
+		}).toSeq//.sorted
 	}
 	override def statsSummary(c: Checker): String = c.description(long = false)
 	override def stats: Iterable[String] = {
