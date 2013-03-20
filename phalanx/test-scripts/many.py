@@ -1,5 +1,5 @@
 #!/usr/bin/python
-import sys, os
+import sys, os, urllib
 from time import time
 from random import randint
 from twisted.web.client import getPage
@@ -16,6 +16,7 @@ numberOfRequests = int(os.environ.get('REQUESTS', 5000))
 concurrentRequests = int(os.environ.get('CONCURRENT', 10))
 dotProgress = int(os.environ.get('PROGRESS', 100))
 baseUrl = os.environ.get('URL', "http://localhost:4666")
+longOnes = os.environ.get('LONGONES', 500)
 
 class Dots:
 	def __init__(self):
@@ -28,10 +29,14 @@ class Dots:
 			sys.stdout.flush()	
 
 dots = Dots()
+HEADERS = { 'referer': "test-scripts/many.py",
+					  'Content-Type':'application/x-www-form-urlencoded'}
 
 def makeRequest(x):
-	startTime = time()
-	d = getPage("%s/match?type=user&content=%s" % (baseUrl, x))
+	startTime = time()	
+	typ = "content" if len(x)>16 else "user"
+	d = getPage("%s/match?type=%s" % (baseUrl,typ), method = b'POST', headers = HEADERS,
+							postdata = urllib.urlencode(dict(content=x)))
 	@d.addCallback
 	def cb(result):
 		dots.add(time() - startTime)
@@ -60,7 +65,9 @@ if __name__ == '__main__':
 		allIps = ["100.100.100.100" for j in range(0, numberOfRequests) ] # `numberOfRequests` same IPs
 		print "Same requests"
 	else:
-		allIps = ["%d.%d.%d.%d" % tuple([randint(1,255) for i in range(0,4)]) for j in range(0, numberOfRequests) ] # `numberOfRequests` random IPs
+		allIps = [("%d.%d.%d.%d" % tuple([randint(1,255) for i in range(0,4)]) if (longOnes == 0 or j % longOnes != 0) else
+			        "".join(chr(randint(32, 122)) for x in range(1, 1000)))
+							for j in range(0, numberOfRequests) ] # `numberOfRequests` random IPs
 	startTime = time()
 	reactor.callWhenRunning(oneBatch, 0, allIps)
 	reactor.run()

@@ -15,11 +15,15 @@ import org.jboss.netty.handler.codec.http.HttpResponseStatus
 import util.parsing.json.{JSONObject, JSONArray, JSONFormat}
 import com.twitter.finagle.http.RichHttp
 
+
 class ExceptionLogger[Req, Rep](val logger: NiceLogger) extends SimpleFilter[Req, Rep] {
 	def this(loggerName: String) = this(NiceLogger(loggerName))
 	def apply(request: Req, service: Service[Req, Rep]): Future[Rep] = {
 		service(request).onFailure((exception) => {
-			logger.exception("Exception in service", exception)
+      exception match {
+        case e: java.util.concurrent.CancellationException => ()
+        case _ => logger.exception("Exception in service", exception)
+      }
 		})
 	}
 }
@@ -306,7 +310,8 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 	}
   class StatsGatherer {
     case class LongRequest(duration:Duration, pr: ParsedRequest) {
-      override def toString:String = s"$duration ${pr.request.remoteHost} ${pr.request.path} ${pr.request.headers.getOrElse("Referer", "")}  ${pr.checkTypes.mkString(",")} ${pr.content}"
+      override def toString:String = s"$duration ${pr.request.remoteHost} ${pr.request.path} ${pr.checkTypes.mkString(",")} ${pr.request.headers.getOrElse("Referer","")}\n" +
+          pr.content.mkString("\n")
     }
     implicit object LongRequestOrdering extends Ordering[LongRequest] {
       def compare(a:LongRequest, b:LongRequest) = a.duration compare b.duration
