@@ -204,7 +204,6 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
     }
     result
   }
-
 	def apply(request: Request): Future[Response] = {
 		stripPath(request) match {
 			case "" => Future(Respond("PHALANX ALIVE"))
@@ -224,10 +223,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 			}
 		}
 	}
-
-
-
-  case class ParsedRequest(request: Request) {
+  abstract class ParsedRequest(request: Request) {
 		val params = request.params
 		val lang = params.get("lang") match {
 			case None => "en"
@@ -250,8 +246,8 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
       case "user" :: Nil => Some(params.getAll("content").mkString("|"))
       case _ => None
     }
-
-		def findMatches(limit: Int): Seq[DatabaseRuleInfo] = {
+    val limit: Int
+		lazy val matches: Seq[DatabaseRuleInfo] = {
       cacheable match {
         case Some(value) if (userCache.contains(value)) => {
           stats.cacheHit()
@@ -271,6 +267,9 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
         }
       }
 		}
+
+  }
+
 		def checkResponse = {
 			if (ruleSystems.isEmpty) Respond.unknownType else {
 				if (content.isEmpty) 	Respond.contentMissing	else {
@@ -280,16 +279,12 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 				}
 			}
 		}
-
 		def matchResponse = {
 			if (ruleSystems.isEmpty) Respond.unknownType else {
         if (content.isEmpty) Respond.contentMissing	else {
-					val limit = request.params.getIntOrElse("limit", 1)
-          val matches = findMatches(limit)
-          logger.trace(s"match: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
-          val response = Respond.json(matches)
 
-          response
+          logger.trace(s"match: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
+          Respond.json(matches)
 				}
 			}
 		}
@@ -308,7 +303,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 	}
   class StatsGatherer {
     case class LongRequest(duration:Duration, pr: ParsedRequest) {
-      override def toString:String = s"$duration ${pr.request.remoteHost} ${pr.request.path} ${pr.checkTypes} ${pr.content}"
+      override def toString:String = s"$duration ${pr.request.remoteHost} ${pr.request.path} ${pr.request.headers.getOrElse("Referer", "")}  ${pr.checkTypes.mkString(",")} ${pr.content}"
     }
     implicit object LongRequestOrdering extends Ordering[LongRequest] {
       def compare(a:LongRequest, b:LongRequest) = a.duration compare b.duration
@@ -319,30 +314,24 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
     private var cacheHits = 0
     private val longRequests = collection.mutable.SortedSet.empty[LongRequest]
     private var longRequestThreshold = 0.microsecond
-    private val longRequestsMax = 5
+    private val longRequestsMax = 10
 
-    def storeRequest(time: Duration, request: => ParsedRequest) {
-      pool( {
-        matchTime += time
-        matchCount += 1
-        if (time > longRequestThreshold) {
-          longRequests += LongRequest(time, request)
-          if (longRequests.size > longRequestsMax) longRequests -= longRequests.head
-          longRequestThreshold = longRequests.head.duration
-        }
-      })
+    def storeRequest(time: Duration, request: => ParsedRequest) = pool {
+      matchTime += time
+      matchCount += 1
+      if (time >= longRequestThreshold || longRequests.size < longRequestsMax) {
+        longRequests += LongRequest(time, request)
+        if (longRequests.size > longRequestsMax) longRequests -= longRequests.head
+        longRequestThreshold = longRequests.head.duration
+      }
     }
-    def cacheHit() {
-      pool( {  cacheHits += 1 } )
-    }
-    def reset() {
-      pool( {
-        matchTime = 0.microsecond
-        matchCount = 0
-        cacheHits = 0
-        longRequests.clear()
-        longRequestThreshold = 0.microsecond
-      })
+    def cacheHit() = pool {  cacheHits += 1 }
+    def reset() = pool {
+      matchTime = 0.microsecond
+      matchCount = 0
+      cacheHits = 0
+      longRequests.clear()
+      longRequestThreshold = 0.microsecond
     }
     override def toString: String = Seq(
       s"Total time spent matching: $totalTime",
@@ -352,14 +341,13 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
       s"Cache hit %: ${if (matchCount+cacheHits>0) cacheHits*100/(matchCount+cacheHits) else "unknown"}",
       s"Longest request time: ${longRequests.lastOption.map(_.duration.toString()).getOrElse("unknown")}"
     ).mkString("\n")
-    def longStats:String = longRequests.map(_.toString).mkString("\n")
+    val breakline = "\n"+("-"*80) + "\n"
+    def longStats:String = longRequests.toSeq.reverse.map(_.toString).mkString(breakline)
     def totalTime:String = matchTime.toString()
     def avgTime: String = matchCount match {
       case 0 => "unknown"
       case x => (matchTime / x).inMicroseconds + " microseconds"
     }
-
-
   }
 }
 

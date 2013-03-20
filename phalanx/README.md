@@ -207,7 +207,7 @@ Show total matching time since last full reload
 Show average matching time for cache misses since last full reload
 
 ### /stats/long
-Shows 5 longest requests since last full reload
+Shows 10 longest requests since last full reload
 
 ### /view
 Checks current information about a rule. Id must be passed with id parameter.

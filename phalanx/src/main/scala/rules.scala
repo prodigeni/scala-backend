@@ -12,6 +12,7 @@ class RuleViolation(val rules: Iterable[DatabaseRuleInfo]) extends Exception {
 
 case class Checkable(text: String, language: String = "en") {
 	val lcText = text.toLowerCase
+  override def toString:String = text
 }
 
 sealed trait CaseType {
