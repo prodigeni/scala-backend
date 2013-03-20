@@ -207,8 +207,8 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 	def apply(request: Request): Future[Response] = {
 		stripPath(request) match {
 			case "" => Future(Respond("PHALANX ALIVE"))
-			case "match" => futurePool(ParsedRequest(request).matchResponse)
-			case "check" => futurePool(ParsedRequest(request).checkResponse)
+			case "match" => futurePool(MatchRequest(request).response)
+			case "check" => futurePool(CheckRequest(request).response)
 			case "validate" => futurePool(validateRegex(request))
 			case "reload" => reloadPool(reload(request, true))
       case "notify" => reloadPool(reload(request, false))
@@ -223,7 +223,9 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
 			}
 		}
 	}
-  abstract class ParsedRequest(request: Request) {
+  abstract class ParsedRequest {
+    val request: Request
+    val limit: Int
 		val params = request.params
 		val lang = params.get("lang") match {
 			case None => "en"
@@ -246,7 +248,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
       case "user" :: Nil => Some(params.getAll("content").mkString("|"))
       case _ => None
     }
-    val limit: Int
+    def response: Response
 		lazy val matches: Seq[DatabaseRuleInfo] = {
       cacheable match {
         case Some(value) if (userCache.contains(value)) => {
@@ -267,38 +269,39 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
         }
       }
 		}
-
+    def sendToScribe(rule: DatabaseRuleInfo): Future[Unit] = {
+      if (user.isDefined && wiki.isDefined) {
+        scribe(Map(
+          "blockId" → rule.dbId,
+          "blockType" → rule.typeMask,
+          "blockTs" → com.wikia.wikifactory.DB.wikiCurrentTime,
+          "blockUser" → user.get,
+          "city_id" → wiki.get
+        ))
+      }
+      else Future.Done
+    }
   }
-
-		def checkResponse = {
+  case class CheckRequest(request: Request) extends ParsedRequest {
+    val limit = 1
+		def response = {
 			if (ruleSystems.isEmpty) Respond.unknownType else {
 				if (content.isEmpty) 	Respond.contentMissing	else {
-					val matches = findMatches(1)
 					logger.trace(s"check: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
 					if (matches.isEmpty) Respond.ok else Respond.failure
 				}
 			}
-		}
-		def matchResponse = {
+    }
+  }
+  case class MatchRequest(request: Request) extends ParsedRequest {
+    val limit = request.params.getIntOrElse("limit", 1)
+		def response = {
 			if (ruleSystems.isEmpty) Respond.unknownType else {
         if (content.isEmpty) Respond.contentMissing	else {
-
           logger.trace(s"match: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
           Respond.json(matches)
 				}
 			}
-		}
-		def sendToScribe(rule: DatabaseRuleInfo): Future[Unit] = {
-			if (user.isDefined && wiki.isDefined) {
-				scribe(Map(
-					"blockId" → rule.dbId,
-					"blockType" → rule.typeMask,
-					"blockTs" → com.wikia.wikifactory.DB.wikiCurrentTime,
-					"blockUser" → user.get,
-					"city_id" → wiki.get
-				))
-			}
-			else Future.Done
 		}
 	}
   class StatsGatherer {
