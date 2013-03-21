@@ -83,7 +83,7 @@ $ curl --silent --noproxy localhost "http://localhost:4666/match?lang=en&type=co
 
 ### /validate
 Validates regular expression syntax from parameter "regex".
-Result will be either `ok\n` or `failure\n`
+Result will be either `ok\n` or `failure\n` followed by error message
 
 Examples:
 
@@ -93,8 +93,11 @@ ok
 ```
 
 ```
-$ curl --silent --noproxy localhost "http://localhost:4666/validate?regex=^alama(((kota$"
+$ curl --silent --noproxy localhost 'http://localhost:4666/validate?regex=^alama)))kota$'
 failure
+Unmatched closing ')' near index 5
+^alama)))kota$
+     ^
 ```
 
 ### /reload
