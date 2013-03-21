@@ -35,6 +35,7 @@ object PackagePreloader {
 			result.force.toSet
       } catch {
         case e: java.util.zip.ZipException => Set.empty
+        case e: java.io.FileNotFoundException => Set.empty
         case x: Throwable => throw x
       }
 		}
