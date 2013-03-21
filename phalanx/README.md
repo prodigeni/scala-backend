@@ -123,82 +123,79 @@ Example:
 
 `$ curl --silent --noproxy localhost "http://localhost:4666/stats"`
 
+    Phalanx server version 0.20.2aa221581e609afe8e04cdd8ada8ef623701706b
+    Next rule expire date: 2013-03-21 16:06:19 +0000
+    NewRelic environment: not set
+    Main worker threads: 4
+    Max memory: 1.4 GiB
+    Free memory: 1.1 GiB
+    Total memory: 1.4 GiB
+    Total time spent matching: 0.seconds
+    Average time spent matching: unknown
+    Matches done: 0
+    User cache hits: 0
+    Cache hit %: unknown
+    Longest request time: unknown
+    User cache: 0/8191
+
     email:
-      CombinedRuleSystem with total 75 rules and 3 checkers
-      Case insensitive (All langugages) : exact set of 56 phrases, regex (234 characters)
-      Case sensitive (All langugages) : exact set of 5 phrases
-
+      CombinedRuleSystem with total 65 rules and 3 checkers
+      Case insensitive (All langugages) [2 checkers]: exact set of 45 phrases, re2-regex (254 characters)
+      Case sensitive (All langugages) [1 checkers]: exact set of 5 phrases
     wiki_creation:
-      CombinedRuleSystem with total 326 rules and 5 checkers
-      Case insensitive (All langugages) : exact set of 69 phrases, regex (3169 characters)
-      Case insensitive (ru) : exact set of 2 phrases
-      Case sensitive (All langugages) : exact set of 16 phrases, regex (189 characters)
-
+      CombinedRuleSystem with total 313 rules and 6 checkers
+      Case insensitive (All langugages) [2 checkers]: exact set of 67 phrases, re2-regex (2918 characters)
+      Case insensitive (ru) [1 checkers]: exact set of 2 phrases
+      Case sensitive (All langugages) [2 checkers]: exact set of 17 phrases, re2-regex (193 characters)
+      Case sensitive (pl) [1 checkers]: exact set of 1 phrases
     question_title:
-      CombinedRuleSystem with total 2099 rules and 8 checkers
-      Case insensitive (All langugages) : exact set of 60 phrases, regex (14924 characters)
-      Case insensitive (de) : regex (8705 characters)
-      Case insensitive (en) : regex (9 characters)
-      Case insensitive (fr) : exact set of 1 phrases
-      Case insensitive (ru) : regex (347 characters)
-      Case sensitive (All langugages) : exact set of 4 phrases, regex (606 characters)
-
+      CombinedRuleSystem with total 2117 rules and 9 checkers
+      Case insensitive (All langugages) [2 checkers]: exact set of 61 phrases, re2-regex (12793 characters)
+      Case insensitive (de) [1 checkers]: re2-regex (6237 characters)
+      Case insensitive (en) [1 checkers]: re2-regex (5 characters)
+      Case insensitive (fr) [1 checkers]: exact set of 1 phrases
+      Case insensitive (ru) [1 checkers]: re2-regex (349 characters)
+      Case sensitive (All langugages) [2 checkers]: exact set of 4 phrases, re2-regex (644 characters)
+      Case sensitive (pl) [1 checkers]: exact set of 1 phrases
     cookie:
       CombinedRuleSystem with total 0 rules and 0 checkers
-
     content:
-      CombinedRuleSystem with total 4635 rules and 8 checkers
-      Case insensitive (All langugages) : exact set of 216 phrases, regex (160112 characters)
-      Case insensitive (de) : regex (12 characters)
-      Case insensitive (en) : regex (23 characters)
-      Case insensitive (fr) : regex (21 characters)
-      Case insensitive (ru) : regex (347 characters)
-      Case sensitive (All langugages) : exact set of 17 phrases, regex (851 characters)
-
+      CombinedRuleSystem with total 4591 rules and 9 checkers
+      Case insensitive (All langugages) [2 checkers]: exact set of 204 phrases, re2-regex (165005 characters)
+      Case insensitive (de) [1 checkers]: re2-regex (14 characters)
+      Case insensitive (en) [1 checkers]: re2-regex (25 characters)
+      Case insensitive (fr) [1 checkers]: re2-regex (17 characters)
+      Case insensitive (ru) [1 checkers]: re2-regex (349 characters)
+      Case sensitive (All langugages) [2 checkers]: exact set of 17 phrases, re2-regex (855 characters)
+      Case sensitive (pl) [1 checkers]: exact set of 1 phrases
     title:
-      CombinedRuleSystem with total 1270 rules and 6 checkers
-      Case insensitive (All langugages) : exact set of 671 phrases, regex (13397 characters)
-      Case insensitive (en) : regex (53 characters)
-      Case insensitive (ru) : regex (347 characters)
-      Case sensitive (All langugages) : exact set of 24 phrases, regex (504 characters)
-
+      CombinedRuleSystem with total 1244 rules and 7 checkers
+      Case insensitive (All langugages) [2 checkers]: exact set of 662 phrases, re2-regex (12688 characters)
+      Case insensitive (en) [1 checkers]: re2-regex (25 characters)
+      Case insensitive (ru) [1 checkers]: re2-regex (349 characters)
+      Case sensitive (All langugages) [2 checkers]: exact set of 24 phrases, re2-regex (556 characters)
+      Case sensitive (pl) [1 checkers]: exact set of 1 phrases
     user:
-      CombinedRuleSystem with total 14817 rules and 7 checkers
-      Case insensitive (All langugages) : exact set of 11173 phrases, regex (11902 characters)
-      Case insensitive (en) : regex (23 characters)
-      Case insensitive (ru) : regex (347 characters)
-      Case sensitive (All langugages) : exact set of 2596 phrases, regex (1057 characters)
-      Case sensitive (en) : exact set of 1 phrases
-
+      CombinedRuleSystem with total 9573 rules and 8 checkers
+      Case insensitive (All langugages) [2 checkers]: exact set of 8470 phrases, re2-regex (11298 characters)
+      Case insensitive (en) [1 checkers]: re2-regex (25 characters)
+      Case insensitive (ru) [1 checkers]: re2-regex (349 characters)
+      Case sensitive (All langugages) [2 checkers]: exact set of 212 phrases, re2-regex (839 characters)
+      Case sensitive (en) [1 checkers]: exact set of 1 phrases
+      Case sensitive (pl) [1 checkers]: exact set of 1 phrases
     summary:
-      CombinedRuleSystem with total 1033 rules and 7 checkers
-      Case insensitive (All langugages) : exact set of 189 phrases, regex (20199 characters)
-      Case insensitive (de) : regex (12 characters)
-      Case insensitive (en) : regex (23 characters)
-      Case insensitive (ru) : regex (347 characters)
-      Case sensitive (All langugages) : exact set of 14 phrases, regex (1002 characters)
-
+      CombinedRuleSystem with total 989 rules and 8 checkers
+      Case insensitive (All langugages) [2 checkers]: exact set of 179 phrases, re2-regex (19468 characters)
+      Case insensitive (de) [1 checkers]: re2-regex (14 characters)
+      Case insensitive (en) [1 checkers]: re2-regex (25 characters)
+      Case insensitive (ru) [1 checkers]: re2-regex (349 characters)
+      Case sensitive (All langugages) [2 checkers]: exact set of 14 phrases, re2-regex (1006 characters)
+      Case sensitive (pl) [1 checkers]: exact set of 1 phrases
     recent_questions:
-      CombinedRuleSystem with total 2829 rules and 5 checkers
-      Case insensitive (All langugages) : exact set of 36 phrases, regex (15758 characters)
-      Case insensitive (de) : regex (8820 characters)
-      Case sensitive (All langugages) : exact set of 4 phrases, regex (80 characters)
-
-    Next rule expire date: 2013-03-19 18:23:26 +0000
-    NewRelic environment: phalanx-production
-    Phalanx server version 0.20.0093b2ec192411e50262ac8b090c46bd9392ad35
-    Main worker threads: 16
-    Max memory: 474.9 MiB
-    Free memory: 386.7 MiB
-    Total memory: 474.9 MiB
-    Total time spent matching: 3.seconds+340.milliseconds+261.microseconds+397.nanoseconds
-    Average time spent matching: 668 microseconds
-    Matches done: 5000
-    User cache hits: 0
-    Cache hit %: 0
-    Longest request time: 118.milliseconds+56.microseconds+890.nanoseconds
-    User cache: 5000/8191
-
+      CombinedRuleSystem with total 2837 rules and 5 checkers
+      Case insensitive (All langugages) [2 checkers]: exact set of 36 phrases, re2-regex (12712 characters)
+      Case insensitive (de) [1 checkers]: re2-regex (6308 characters)
+      Case sensitive (All langugages) [2 checkers]: exact set of 4 phrases, re2-regex (88 characters)
 
 ### /stats/total
 Show total matching time since last full reload

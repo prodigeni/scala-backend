@@ -119,17 +119,18 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
   def statsString: String = {
     val checkerStats = rules.toSeq.map(t => {
       val (s, ruleSystem) = t
-      s + ":\n" + ruleSystem.stats.map("  "+_)
+      s + ":\n" + ruleSystem.stats.map("  "+_).mkString("\n")
     }).mkString("\n")
     val response =  Seq(Main.versionString,
-      nextExpireDate.map("Next rule expire date: " + _.toString),
-      sys.props.get("newrelic.environment").map("NewRelic environment: " + _),
+      "Next rule expire date: "+nextExpireDate.getOrElse("not set"),
+      "NewRelic environment: " +sys.props.getOrElse("newrelic.environment", "not set"),
       s"Main worker threads: $threadPoolSize",
       "Max memory: " + sys.runtime.maxMemory().humanReadableByteCount,
       "Free memory: " + sys.runtime.freeMemory().humanReadableByteCount,
       "Total memory: " + sys.runtime.totalMemory().humanReadableByteCount,
       stats.toString,
       s"User cache: ${userCache.size}/$userCacheSize",
+      "",
       checkerStats
     ).mkString("\n")
     response
