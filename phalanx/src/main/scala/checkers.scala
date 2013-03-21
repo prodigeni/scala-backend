@@ -27,7 +27,7 @@ case class ContainsChecker(caseType: CaseType, text: String) extends Checker {
 
 case class Re2RegexChecker(caseType: CaseType, text: String) extends Checker {
   import com.logentries.re2.{RE2, Options}
-  def baseOptions = new Options().setNeverCapture(true).setMaxMem(64*1024*1024)
+  def baseOptions = new Options().setMaxMem(128*1024*1024).setNeverCapture(true).setLogErrors(false)
   private final val flags = Map(
    CaseSensitive -> baseOptions.setCaseSensitive(true),
    CaseInsensitive -> baseOptions.setCaseSensitive(false)
