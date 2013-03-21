@@ -50,6 +50,7 @@ object Respond {
 
 
 object Main extends App {
+  final lazy val processors = Runtime.getRuntime.availableProcessors()
 	def loadProperties(fileName: String): java.util.Properties = {
 		val file = new File(fileName)
 		val properties = new java.util.Properties()
@@ -59,6 +60,7 @@ object Main extends App {
 	}
 	def wikiaProp(key: String) = sys.props("com.wikia.phalanx." + key)
   def wikiaPropOption(key: String) = sys.props.get("com.wikia.phalanx." + key)
+  def wikiaIntProp(key: String, default: => Int):Int = sys.props.get("com.wikia.phalanx." + key).map(_.toInt).getOrElse(default)
 	def scribeClient() = {
 		val host = wikiaProp("scribe.host")
 		val port = wikiaProp("scribe.port").toInt
@@ -103,11 +105,7 @@ object Main extends App {
 			case "discard" => new ScribeDiscard()
 		}
 	}
-	val port = wikiaProp("port").toInt
-	val threadCount: Option[Int] = wikiaProp("threads") match {
-		case s: String if (s != null && s.nonEmpty) => Some(s.toInt)
-		case _ => None
-	}
+	val port = wikiaIntProp("port", 4666)
   val notifyNodes = wikiaProp("notifynodes") match {
     case s: String if (s != null && s.nonEmpty) => s.split(' ').toSeq
     case _ => Seq.empty
@@ -120,7 +118,6 @@ object Main extends App {
 	val mainService = new MainService(
 		(old, changed) => loader.reloadSome(dbSession, old, changed.toSet),
 		new ExceptionLogger(logger) andThen scribe,
-		threadCount,
     notifyNodes
 	)
 	val config = ServerBuilder()

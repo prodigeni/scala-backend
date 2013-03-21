@@ -10,14 +10,14 @@ import com.twitter.util._
 import java.util.NoSuchElementException
 
 class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => Map[String, RuleSystem],
-                  val scribe: Service[Map[String, Any], Unit], threadCount: Option[Int] = None, notifyNodes: Seq[String] = Seq.empty  ) extends Service[Request, Response] {
+                  val scribe: Service[Map[String, Any], Unit], notifyNodes: Seq[String] = Seq.empty  ) extends Service[Request, Response] {
   def this(initialRules: Map[String, RuleSystem], scribe: Service[Map[String, Any], Unit]) = this((_, _) => initialRules, scribe)
   val logger = NiceLogger("MainService")
   var nextExpireDate: Option[Time] = None
   var expireWatchTask: Option[TimerTask] = None
-  val userCacheSize = 8191 // TODO: configurable?
+  val userCacheMaxSize = Main.wikiaIntProp("userCacheMaxSize", (2 << 16)-1)
   val stats = new StatsGatherer()
-  val userCache = new SynchronizedLruMap[String, Seq[DatabaseRuleInfo]](userCacheSize)
+  val userCache = new SynchronizedLruMap[String, Seq[DatabaseRuleInfo]](userCacheMaxSize)
   val notifyMap = {
     val hostname = java.net.InetAddress.getLocalHost.getHostName
     logger.debug(s"Local hostname: $hostname")
@@ -34,7 +34,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
   }
   val timer = com.twitter.finagle.util.DefaultTimer.twitter
   @transient var rules = reloader(Map.empty, Seq.empty)
-  val threadPoolSize = threadCount.getOrElse(Runtime.getRuntime.availableProcessors())
+  val threadPoolSize:Int = Main.wikiaIntProp("serviceThreadCount", Main.processors)
   val futurePool = if (threadPoolSize <= 0) {FuturePool.immediatePool} else {
     FuturePool(java.util.concurrent.Executors.newFixedThreadPool(threadPoolSize, new NamedPoolThreadFactory("MainService pool")))
   }
@@ -122,14 +122,14 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
       s + ":\n" + ruleSystem.stats.map("  "+_).mkString("\n")
     }).mkString("\n")
     val response =  Seq(Main.versionString,
-      "Next rule expire date: "+nextExpireDate.getOrElse("not set"),
-      "NewRelic environment: " +sys.props.getOrElse("newrelic.environment", "not set"),
-      s"Main worker threads: $threadPoolSize",
-      "Max memory: " + sys.runtime.maxMemory().humanReadableByteCount,
-      "Free memory: " + sys.runtime.freeMemory().humanReadableByteCount,
-      "Total memory: " + sys.runtime.totalMemory().humanReadableByteCount,
+      s"Next rule expire date:${nextExpireDate.getOrElse("not set")}",
+      s"NewRelic environment: ${sys.props.getOrElse("newrelic.environment", "not set")}",
+      s"Processor count: ${Main.processors}",
+      s"Max memory: ${sys.runtime.maxMemory().humanReadableByteCount}",
+      s"Free memory: ${sys.runtime.freeMemory().humanReadableByteCount}",
+      s"Total memory: ${sys.runtime.totalMemory().humanReadableByteCount}",
       stats.toString,
-      s"User cache: ${userCache.size}/$userCacheSize",
+      s"User cache: ${userCache.size}/$userCacheMaxSize",
       "",
       checkerStats
     ).mkString("\n")
@@ -266,8 +266,11 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
   }
   class StatsGatherer {
     case class LongRequest(duration:Duration, pr: ParsedRequest) {
-      override def toString:String = s"$duration ${pr.request.remoteHost} ${pr.request.path} ${pr.checkTypes.mkString(",")} ${pr.request.headers.getOrElse("Referer","")}\n" +
-        pr.content.mkString("\n")
+      override def toString:String = Seq(
+        s"$duration ${pr.request.remoteHost} ${pr.request.path} ${pr.checkTypes.mkString(",")} ",
+        s"[${pr.content.map(_.text.length).sum} chars] Referer: ${pr.request.headers.getOrElse("Referer","")} ",
+        s"Matches: ${pr.matches.mkString(",")}"
+      ).mkString
     }
     implicit object LongRequestOrdering extends Ordering[LongRequest] {
       def compare(a:LongRequest, b:LongRequest) = a.duration compare b.duration

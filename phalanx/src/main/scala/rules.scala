@@ -87,7 +87,7 @@ object Rule {
 case class DatabaseRule(text: String, dbId: Int, reason: String, caseSensitive: Boolean, exact: Boolean, regex: Boolean,
                         language: Option[String], expires: Option[Time], authorId: Int, typeMask: Int) extends DatabaseRuleInfo with Rule {
 	val caseType = if (caseSensitive || DatabaseRuleInfo.letterPattern.findFirstIn(text).isEmpty) CaseSensitive else CaseInsensitive
-	val checker: Checker = {
+  val checker: Checker = {
 		if (regex) Checker.regex(caseType, text, typeMask)
 		else {
 			if (exact) Checker.exact(caseType, caseType(text)) else Checker.contains(caseType, caseType(text))
@@ -95,7 +95,9 @@ case class DatabaseRule(text: String, dbId: Int, reason: String, caseSensitive: 
 	}
 	def allMatches(s: Checkable): Iterable[DatabaseRuleInfo] = if (isMatch(s)) Some(this) else None
 	def isMatch(s: Checkable): Boolean = (this.language.isEmpty || s.language == this.language.get) && checker.isMatch(s)
+  override def toString = s"Rule($dbId, $text, $checker)"
 	assert(language.isEmpty || language.get != "")
+
 }
 
 trait RuleSystem extends Rule {
@@ -108,7 +110,7 @@ trait RuleSystem extends Rule {
 
 class FlatRuleSystem(initialRules: Iterable[DatabaseRule]) extends RuleSystem {
 	val rules = initialRules.toSet
-	val ruleStream = rules.toStream
+	val ruleStream = initialRules.toIndexedSeq.sortBy(_.text.length).toStream
 	val expiring = rules.filter(r => r.expires.isDefined).toIndexedSeq.sortBy((r: DatabaseRuleInfo) => r.expires.get)
 	def isMatch(s: Checkable): Boolean = rules.exists(_.isMatch(s))
 	def allMatches(s: Checkable) = ruleStream.flatMap((x: DatabaseRule) => x.allMatches(s))
@@ -144,9 +146,7 @@ class FlatRuleSystem(initialRules: Iterable[DatabaseRule]) extends RuleSystem {
 class CombinedRuleSystem(initialRules: Iterable[DatabaseRule]) extends FlatRuleSystem(initialRules) {
   type checkerSeq = ParSeq[Checker]
 	private val logger = NiceLogger("RuleSystem")
-
 	val checkers: Map[Option[String], checkerSeq] = extractCheckers.withDefaultValue(ParSeq.empty)
-
 	def extractCheckers: Map[Option[String], checkerSeq] = {
 		val groupedByLang = initialRules.groupBy(rule => rule.language)
 		val result = for ((lang, rs) <- groupedByLang) yield (lang, Checker.combine(rs.map(_.checker)).toIndexedSeq.par)

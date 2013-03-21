@@ -8,7 +8,6 @@ abstract sealed class Checker {
 	def isMatch(s: Checkable): Boolean
 	def description(long: Boolean = false): String
   def caseType: CaseType
-  //val text: String
   override def toString:String = description(false)
 }
 
@@ -57,6 +56,7 @@ case class JavaRegexChecker(caseType: CaseType, text: String) extends Checker {
   final val CSPatternOptions = Pattern.UNICODE_CASE | Pattern.DOTALL
   final val CIPatternOptions = Pattern.UNICODE_CASE | Pattern.DOTALL | Pattern.CASE_INSENSITIVE
   val regex = try {
+    InvalidRegex.logger.warn(s"This java regex should not be created: $text")
     Pattern.compile(text, if (caseType == CaseSensitive) CSPatternOptions else CIPatternOptions)
   } catch {
     case e: Throwable => throw new InvalidRegex(text, e)
@@ -68,7 +68,7 @@ case class JavaRegexChecker(caseType: CaseType, text: String) extends Checker {
 
 
 object InvalidRegex {
-  private val logger = NiceLogger("InvalidRegex")
+  val logger = NiceLogger("InvalidRegex")
   def checkForError(regex: String):Option[String] = try {
     regex.r
     if (regex.contains("(?!")) Some("Invalid perl operator (?!") else None
@@ -82,15 +82,25 @@ object InvalidRegex {
 }
 
 object Checker {
-  val logger = NiceLogger("Checker")
+  final val logger = NiceLogger("Checker")
   final val TYPE_USER = 8
+  var groupCount = Seq(Main.wikiaIntProp("workerThreadCount", Main.processors), 1).max
+  def splitIntoGroups(whole: Iterable[String]):Iterable[Iterable[String]] = {
+    if (groupCount==1) Seq(whole) else {
+      val all = whole.toSeq
+      val groupSize = Seq(all.size / groupCount, 1).max
+      all.grouped(groupSize).toIterable
+    }
+  }
   def regex(caseType: CaseType, text: String, longContent:Boolean):Checker = {
     InvalidRegex.checkForError(text) match {
       case Some(s) => throw new InvalidRegex(s, null)
       case _ => ()
     }
-    if (longContent) Re2RegexChecker(caseType,text) else JavaRegexChecker(caseType, text)
+    //if (longContent) Re2RegexChecker(caseType,text) else JavaRegexChecker(caseType, text)
+    Re2RegexChecker(caseType,text)
   }
+  def regex(caseType: CaseType, alternatives: Iterable[String]):Checker = regex(caseType, alternatives.mkString("|"), true)
   def regex(caseType: CaseType, text: String, typeMask:Int):Checker = regex(caseType, text, (typeMask & TYPE_USER) != 0)
   def contains(caseType: CaseType, text: String):Checker = ContainsChecker(caseType, text)
   def exact(caseType: CaseType, text: String):Checker = ExactChecker(caseType, text)
@@ -107,8 +117,8 @@ object Checker {
     type func = Iterable[Checker] => Iterable[Checker]
     val exactCs: func = checkers => Seq(SetExactChecker(CaseSensitive, checkers.collect(exactPattern)))
     val exactCi: func = checkers => Seq(SetExactChecker(CaseInsensitive, checkers.collect(exactPattern)))
-    val regexCS: func = checkers => Seq(regex(CaseSensitive, checkers.collect(regexPattern).mkString("|"), true))
-    val regexCI: func = checkers => Seq(regex(CaseInsensitive, checkers.collect(regexPattern).mkString("|") , true))
+    val regexCS: func = checkers => splitIntoGroups(checkers.collect(regexPattern)).map(regex(CaseSensitive,_))
+    val regexCI: func = checkers => splitIntoGroups(checkers.collect(regexPattern)).map(regex(CaseInsensitive,_))
     val result = checkers.groupBy(checker => checker match {
       case ExactChecker(CaseSensitive, _) => exactCs
       case ExactChecker(CaseInsensitive, _) => exactCi
