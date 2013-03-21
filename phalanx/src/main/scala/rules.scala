@@ -88,7 +88,7 @@ case class DatabaseRule(text: String, dbId: Int, reason: String, caseSensitive: 
                         language: Option[String], expires: Option[Time], authorId: Int, typeMask: Int) extends DatabaseRuleInfo with Rule {
 	val caseType = if (caseSensitive || DatabaseRuleInfo.letterPattern.findFirstIn(text).isEmpty) CaseSensitive else CaseInsensitive
 	val checker: Checker = {
-		if (regex) Checker.regex(caseType, text)
+		if (regex) Checker.regex(caseType, text, typeMask)
 		else {
 			if (exact) Checker.exact(caseType, caseType(text)) else Checker.contains(caseType, caseType(text))
 		}
@@ -122,11 +122,13 @@ class FlatRuleSystem(initialRules: Iterable[DatabaseRule]) extends RuleSystem {
 	protected def statsSummary(c: Checker): String = c.description(long = false)
 	protected def statsPerCheckerType(rs: Iterable[Checker]): String = {
 		val groups = rs.groupBy(c => statsSummary(c)).toIndexedSeq.sortBy((pair: (String, Iterable[Checker])) => pair._1)
-		groups.map((pair: (String, Iterable[Checker])) => pair._1 + (if (pair._2.size > 1) {
-			"=" + pair._2.size
-		} else {
-			""
-		})).mkString(", ")
+    groups.map((pair: (String, Iterable[Checker])) => {
+      pair._1 + (if (pair._2.size > 1) {
+        "=" + pair._2.size
+      } else {
+        ""
+      })
+    }).mkString(", ")
 	}
 	protected def statsPerRuleType(rs: Iterable[DatabaseRule]): String = statsPerCheckerType(rs.map(rule => rule.checker))
 	def ruleStats: Iterable[String] = {
@@ -172,9 +174,9 @@ class CombinedRuleSystem(initialRules: Iterable[DatabaseRule]) extends FlatRuleS
 			val (text, checkers) = pair
       val c = checkers.toIndexedSeq
 			text + s"[${c.size} checkers]: " + statsPerCheckerType(checkers)
-		}).toSeq//.sorted
+		}).toSeq.sorted
 	}
-	override def statsSummary(c: Checker): String = c.description(long = false)
+	override def statsSummary(c: Checker): String = c.description(long = true)
 	override def stats: Iterable[String] = {
 		val checkerCount = checkers.values.map(t => t.size).sum
 		Seq((Seq("CombinedRuleSystem", "with", "total", rules.size, "rules", "and", checkerCount, "checkers").mkString(" "))) ++ ruleStats

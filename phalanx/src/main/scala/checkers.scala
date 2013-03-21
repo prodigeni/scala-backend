@@ -8,12 +8,12 @@ abstract sealed class Checker {
 	def isMatch(s: Checkable): Boolean
 	def description(long: Boolean = false): String
   def caseType: CaseType
-  val text: String
+  //val text: String
+  override def toString:String = description(false)
 }
 
 case class ExactChecker(caseType: CaseType, text: String) extends Checker {
 	def isMatch(s: Checkable): Boolean = caseType(s) == text
-	override def toString = s"ExactChecker($caseType,$text)"
 	def description(long: Boolean = false): String = "exact phrase"
 }
 
@@ -21,7 +21,6 @@ case class ContainsChecker(caseType: CaseType, text: String) extends Checker {
   private final val regexSpecials = "\\[].*+{}^$|?()"
 	def isMatch(s: Checkable): Boolean = caseType(s).contains(text)
 	def regexPattern = text.map(c => if (regexSpecials.contains(c)) "\\"+c else c).mkString
-	override def toString = s"ContainsChecker($caseType,$text)"
 	def description(long: Boolean = false): String = "contains"
 }
 
@@ -43,12 +42,10 @@ case class Re2RegexChecker(caseType: CaseType, text: String) extends Checker {
   override def finalize() {
     regex.close() // supposedly required to release memory allocated in native library
   }
-	override def toString = s"RegexChecker($caseType,$text)"
 	def description(long: Boolean = false): String = if (long) "re2-regex (" + text.length + " characters)" else "re2-regex"
 }
 
 case class SetExactChecker(caseType: CaseType, origTexts: Iterable[String]) extends Checker {
-  val text = ""
 	val texts = if (caseType == CaseSensitive) origTexts.toSet else origTexts.map(s => s.toLowerCase).toSet
 	def isMatch(s: Checkable): Boolean = texts.contains(caseType(s))
 	override def toString = "SetExactChecker(" + texts.size + ")"
@@ -65,8 +62,8 @@ case class JavaRegexChecker(caseType: CaseType, text: String) extends Checker {
     case e: Throwable => throw new InvalidRegex(text, e)
   }
   def isMatch(s: Checkable): Boolean = regex.matcher(s.text).find()
+  def regexPattern = "("+text+")"
   def description(long: Boolean = false): String = if (long) "java-regex (" + text.length + " characters)" else "java-regex"
-  override def toString = s"JavaRegexChecker($text)"
 }
 
 
@@ -85,40 +82,39 @@ object InvalidRegex {
 }
 
 object Checker {
-  def regex(caseType: CaseType, text: String):Checker = {
+  val logger = NiceLogger("Checker")
+  final val TYPE_USER = 8
+  def regex(caseType: CaseType, text: String, longContent:Boolean):Checker = {
     InvalidRegex.checkForError(text) match {
       case Some(s) => throw new InvalidRegex(s, null)
       case _ => ()
     }
-    Re2RegexChecker(caseType,text)
+    if (longContent) Re2RegexChecker(caseType,text) else JavaRegexChecker(caseType, text)
   }
+  def regex(caseType: CaseType, text: String, typeMask:Int):Checker = regex(caseType, text, (typeMask & TYPE_USER) != 0)
   def contains(caseType: CaseType, text: String):Checker = ContainsChecker(caseType, text)
   def exact(caseType: CaseType, text: String):Checker = ExactChecker(caseType, text)
   def combine(checkers: Iterable[Checker]):Iterable[Checker] = {
-    type func = Iterable[Checker] => Iterable[Checker]
-    // using those functions as keys in the map
-    val exactCs: func = texts => Seq(SetExactChecker(CaseSensitive, texts.map(_.text)))
-    val exactCi: func = texts => Seq(SetExactChecker(CaseInsensitive, texts.map(_.text)))
     val regexPattern:PartialFunction[Checker, String] = (checker:Checker) => checker match {
       case cc:ContainsChecker => cc.regexPattern
       case cc:Re2RegexChecker => cc.regexPattern
-      case cc:JavaRegexChecker if (InvalidRegex.checkForError(cc.text) == None) => cc.text
+      case cc:JavaRegexChecker if (InvalidRegex.checkForError(cc.text) == None) => cc.regexPattern
     }
-    val containsCs: func = texts => Seq(regex(CaseSensitive, texts.collect(regexPattern).mkString("|") ))
-    val containsCi: func = texts => Seq(regex(CaseInsensitive, texts.collect(regexPattern).mkString("|") ))
-    val regexCS: func = texts => Seq(regex(CaseSensitive, texts.collect(regexPattern).mkString("|") ))
-    val regexCI: func = texts => Seq(regex(CaseInsensitive, texts.collect(regexPattern).mkString("|") ))
-    val others: func = texts => texts
-    checkers.groupBy(checker => checker match {
+    val exactPattern:PartialFunction[Checker, String] = (checker:Checker) => checker match {
+      case ExactChecker(_, text) => text
+    }
+    // using those functions as keys in the map
+    type func = Iterable[Checker] => Iterable[Checker]
+    val exactCs: func = checkers => Seq(SetExactChecker(CaseSensitive, checkers.collect(exactPattern)))
+    val exactCi: func = checkers => Seq(SetExactChecker(CaseInsensitive, checkers.collect(exactPattern)))
+    val regexCS: func = checkers => Seq(regex(CaseSensitive, checkers.collect(regexPattern).mkString("|"), true))
+    val regexCI: func = checkers => Seq(regex(CaseInsensitive, checkers.collect(regexPattern).mkString("|") , true))
+    val result = checkers.groupBy(checker => checker match {
       case ExactChecker(CaseSensitive, _) => exactCs
       case ExactChecker(CaseInsensitive, _) => exactCi
-      case ContainsChecker(CaseSensitive, _) =>  containsCs
-      case ContainsChecker(CaseInsensitive, _) =>  containsCi
-      case Re2RegexChecker(CaseSensitive, _) => regexCS
-      case Re2RegexChecker(CaseInsensitive, _) => regexCI
-      case JavaRegexChecker(CaseSensitive, _) => regexCS
-      case JavaRegexChecker(CaseInsensitive, _) => regexCI
-      case _ => others
-    }).toSeq.map(pair => pair._1(pair._2)).flatten
+      case c:Checker if c.caseType == CaseSensitive => regexCS
+      case c:Checker if c.caseType == CaseInsensitive => regexCI
+    }).toSeq.map(pair => pair._1(pair._2))
+    result.flatten
   }
 }

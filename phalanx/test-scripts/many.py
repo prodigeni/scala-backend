@@ -16,7 +16,7 @@ numberOfRequests = int(os.environ.get('REQUESTS', 5000))
 concurrentRequests = int(os.environ.get('CONCURRENT', 10))
 dotProgress = int(os.environ.get('PROGRESS', 100))
 baseUrl = os.environ.get('URL', "http://localhost:4666")
-longOnes = os.environ.get('LONGONES', 500)
+longOnes = os.environ.get('LONGONES', 50)
 
 class Dots:
 	def __init__(self):
