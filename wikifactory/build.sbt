@@ -2,9 +2,9 @@ name := "wikifactory"
 
 organization := "com.wikia"
 
-version := "0.10"
+version := "0.11"
 
-scalaVersion := "2.10.0"
+scalaVersion := "2.10.1"
 
 publishMavenStyle := true
 

@@ -14,7 +14,7 @@ version ~= { (s) => {
   if (result.size == 40)  s + "." + result else s
 } }
 
-scalaVersion := "2.10.0"
+scalaVersion := "2.10.1"
 
 resolvers ++= Seq(
 	"Wikia Maven repository" at "http://pkg-s1.wikia-prod/maven/releases/",
@@ -37,7 +37,7 @@ publishTo <<= (version) { version: String =>
 
 libraryDependencies ++= Seq(
   "com.logentries.re2" % "libre2-java" % "1.0",
-  "com.wikia" %% "wikifactory" % "0.10",
+  "com.wikia" %% "wikifactory" % "0.11",
   "com.typesafe.slick" %% "slick" % "1.0.0",
   "com.twitter" % "finagle-core_2.10" % "6.1.1",
   "com.twitter" % "finagle-http_2.10" % "6.1.1",
