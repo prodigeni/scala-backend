@@ -12,6 +12,7 @@ import org.jboss.netty.handler.codec.http.HttpResponseStatus
 import util.parsing.json.{JSONObject, JSONArray, JSONFormat}
 import com.twitter.finagle.http.RichHttp
 
+
 class ExceptionLogger[Req, Rep](val logger: NiceLogger) extends SimpleFilter[Req, Rep] {
 	def this(loggerName: String) = this(NiceLogger(loggerName))
 	def apply(request: Req, service: Service[Req, Rep]): Future[Rep] = {
@@ -48,6 +49,23 @@ object Respond {
   val notFound = error("not found", Status.NotFound)
 }
 
+object Configuration extends SysPropConfig {
+  val cwp = "com.wikia.phalanx."
+  object Scribe extends Group("Scribe configuration") {
+    val scribeType = string(cwp+"scribe", "Scribe type: send, buffer or discard", "discard")
+    val host = string(cwp+"scribe.host", "Scribe host name", "")
+    val port = int(cwp+"scribe.port", "Scribe TCP port", 1463)
+    val flushPeriod = int(cwp+"scribe.flushperiod", "Scribe buffer flush period (milliseconds)", 1000)
+  }
+  val port = int(cwp+"port", "HTTP listening port", 4666)
+  val notifyNodes = string(cwp+"notifyNodes", "Space separated list of other nodes to notify", "")
+  val userCacheMaxSize = int("userCacheMaxSize", "Size of LRU cache for user matching", (2 << 16)-1)
+  val serviceThreadCount = int(cwp+"serviceThreadCount", "Number of main service threads, or 0 for auto value", 0)
+  val workerGroups = int(cwp+"workerGroups", "Split each matching work into n parallel groups, or 0 for auto value", 0)
+
+}
+
+
 
 object Main extends App {
   final lazy val processors = Runtime.getRuntime.availableProcessors()
@@ -58,13 +76,8 @@ object Main extends App {
 		println("Loaded properties from " + fileName)
 		properties
 	}
-	def wikiaProp(key: String) = sys.props("com.wikia.phalanx." + key)
-  def wikiaPropOption(key: String) = sys.props.get("com.wikia.phalanx." + key)
-  def wikiaIntProp(key: String, default: => Int):Int = sys.props.get("com.wikia.phalanx." + key).map(_.toInt).getOrElse(default)
 	def scribeClient() = {
-		val host = wikiaProp("scribe.host")
-		val port = wikiaProp("scribe.port").toInt
-		new ScribeClient("log_phalanx", host, port)
+		new ScribeClient("log_phalanx", Configuration.Scribe.host(), Configuration.Scribe.port())
 	}
 
 	val cfName: Option[String] = sys.props.get("phalanx.config") orElse {
@@ -96,17 +109,18 @@ object Main extends App {
 		"com.twitter.util"
 	))
 	logger.info("Preloaded " + preloaded.size + " classes")
+
 	val scribe = {
-		val scribetype = wikiaProp("scribe")
+		val scribetype = Configuration.Scribe.scribeType()
 		logger.info("Creating scribe client (" + scribetype + ")")
 		scribetype match {
 			case "send" => scribeClient()
-			case "buffer" => new ScribeBuffer(scribeClient(), wikiaProp("scribe.flushperiod").toInt.milliseconds)
+			case "buffer" => new ScribeBuffer(scribeClient(), Configuration.Scribe.flushPeriod().milliseconds)
 			case "discard" => new ScribeDiscard()
 		}
 	}
-	val port = wikiaIntProp("port", 4666)
-  val notifyNodes = wikiaProp("notifynodes") match {
+	val port = Configuration.port()
+  val notifyNodes = Configuration.notifyNodes() match {
     case s: String if (s != null && s.nonEmpty) => s.split(' ').toSeq
     case _ => Seq.empty
   }

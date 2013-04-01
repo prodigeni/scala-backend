@@ -84,7 +84,10 @@ object InvalidRegex {
 object Checker {
   final val logger = NiceLogger("Checker")
   final val TYPE_USER = 8
-  var groupCount = Seq(Main.wikiaIntProp("workerThreadCount", Main.processors), 1).max
+  var groupCount = Configuration.workerGroups() match {
+    case 0 => Main.processors
+    case x => x
+  }
   def splitIntoGroups(whole: Iterable[String]):Iterable[Iterable[String]] = {
     if (groupCount==1) Seq(whole) else {
       val all = whole.toSeq
