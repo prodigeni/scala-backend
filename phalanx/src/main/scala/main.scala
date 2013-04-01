@@ -50,7 +50,7 @@ object Respond {
 }
 
 object Configuration extends SysPropConfig {
-  val cwp = "com.wikia.phalanx."
+  private val cwp = "com.wikia.phalanx."
   object Scribe extends Group("Scribe configuration") {
     val scribeType = string(cwp+"scribe", "Scribe type: send, buffer or discard", "discard")
     val host = string(cwp+"scribe.host", "Scribe host name", "")
@@ -63,6 +63,16 @@ object Configuration extends SysPropConfig {
   val serviceThreadCount = int(cwp+"serviceThreadCount", "Number of main service threads, or 0 for auto value", 0)
   val workerGroups = int(cwp+"workerGroups", "Split each matching work into n parallel groups, or 0 for auto value", 0)
 
+  object Log extends Group("Logging configuration") {
+    private val sl = "org.slf4j.simpleLogger."
+    string(sl+"defaultLogLevel", "Default logging level", "info")
+    string(sl+"log.Main", "", "info")
+    string(sl+"log.MainService", "", "debug")
+    string(sl+"log.NewRelic", "", "warn")
+    string(sl+"log.RuleSystem", "", "warn")
+    string(sl+"log.RuleSystemLoader", "", "info")
+    string(sl+"log.Scribe", "", "info")
+  }
 }
 
 

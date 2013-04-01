@@ -1,7 +1,5 @@
 package com.wikia.phalanx
 
-import scala.Function
-
 class ConfigException(msg:String) extends Exception(msg) {
 }
 
@@ -9,12 +7,13 @@ class SysPropConfig {
   outer =>
   protected type FValue[+T] = () => T
   protected def get(key: String):Option[String] = sys.props.get(key)
+  case class Remembered(group: String, key:String, doc:String, default:String, getter:FValue[Any]) {
+  }
   protected def remember[T](group: String, key:String, doc:String, default:String, getter:FValue[T]):FValue[T] = {
-    remembered(key) = (group, doc, default, getter)
+    remembered(key) = Remembered(group, key, doc, default, getter)
     getter
   }
-  protected val remembered = collection.mutable.HashMap.empty[String, (String, String, String, FValue[Any])]
-  protected val groups = collection.mutable.HashMap.empty[String, String]
+  protected val remembered = collection.mutable.HashMap.empty[String, Remembered]
 
   def bool(key:String, doc: String, default:Boolean, group:String = ""):FValue[Boolean] = {
     remember(group, key, doc, default.toString,
@@ -56,5 +55,18 @@ class SysPropConfig {
     def bool(key:String, doc: String, default:Boolean):FValue[Boolean] = outer.bool(key, doc, default, groupDoc)
     def string(key:String, doc: String, default:String):FValue[String] = outer.string(key, doc, default, groupDoc)
     def int(key:String, doc: String, default:Int):FValue[Int] = outer.int(key, doc, default, groupDoc)
+  }
+  def setDefaults() {
+    remembered.foreach( (t:(String, Remembered)) => t match {
+      case (key, r) => if (!sys.props.contains(key)) sys.props(key) = r.default
+    })
+  }
+  def defaultConfigContents: String = {
+    val groups = remembered.values.groupBy(_.group).toSeq.sortBy(_._1)
+    groups.map( {
+      case (groupDoc, props) => {
+
+      }
+    }).mkString("\n")
   }
 }
