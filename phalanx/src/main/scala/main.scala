@@ -7,6 +7,7 @@ import com.twitter.finagle.http.{Http, Request, Status, Version, Response, Messa
 import com.twitter.finagle.{SimpleFilter, Service}
 import com.twitter.util._
 import com.wikia.wikifactory.DB
+import com.wikia.utils.SysPropConfig
 import java.io.{FileInputStream, File}
 import org.jboss.netty.handler.codec.http.HttpResponseStatus
 import util.parsing.json.{JSONObject, JSONArray, JSONFormat}
