@@ -1,13 +1,14 @@
 package com.wikia.phalanx
+
 import collection.JavaConversions._
 import com.twitter.conversions.time._
 import com.twitter.finagle.builder.ServerBuilder
 import com.twitter.finagle.http.filter.ExceptionFilter
 import com.twitter.finagle.http.{Http, Request, Status, Version, Response, Message, RichHttp}
 import com.twitter.finagle.{SimpleFilter, Service}
-import com.twitter.util._
-import com.wikia.wikifactory.DB
+import com.twitter.util.{Future}
 import com.wikia.utils.SysPropConfig
+import com.wikia.wikifactory.DB
 import java.io.{FileInputStream, File}
 import org.jboss.netty.handler.codec.http.HttpResponseStatus
 import util.parsing.json.{JSONObject, JSONArray, JSONFormat}
@@ -59,6 +60,7 @@ object Config extends SysPropConfig {
   val userCacheMaxSize = Main.int(cwp+"userCacheMaxSize", "Size of LRU cache for user matching", (2 << 16)-1)
   val serviceThreadCount = Main.int(cwp+"serviceThreadCount", "Number of main service threads, or 0 for auto value", 0)
   val workerGroups = Main.int(cwp+"workerGroups", "Split each matching work into n parallel groups, or 0 for auto value", 0)
+  val detailedStats = Main.bool(cwp+"detailedStats", "Keep detailed statistics", true)
 
   val Scribe = Group("Scribe configuration")
   val scribeType = Scribe.string(cwp+"scribe", "Scribe type: send, buffer or discard", "discard")
@@ -68,12 +70,12 @@ object Config extends SysPropConfig {
 
   val Log = Group("Logging configuration")
   Log.string(sl+"defaultLogLevel", "Default logging level", "info")
-  Log.string(sl+"log.Main", "", "info")
-  Log.string(sl+"log.MainService", "", "debug")
-  Log.string(sl+"log.NewRelic", "", "warn")
-  Log.string(sl+"log.RuleSystem", "", "warn")
-  Log.string(sl+"log.RuleSystemLoader", "", "info")
-  Log.string(sl+"log.Scribe", "", "info")
+  Log.string(sl+"log.Main", "", "")
+  Log.string(sl+"log.MainService", "", "")
+  Log.string(sl+"log.NewRelic", "", "")
+  Log.string(sl+"log.RuleSystem", "", "")
+  Log.string(sl+"log.RuleSystemLoader", "", "")
+  Log.string(sl+"log.Scribe", "", "")
 }
 
 

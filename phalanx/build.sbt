@@ -37,7 +37,7 @@ publishTo <<= (version) { version: String =>
 
 libraryDependencies ++= Seq(
   "com.logentries.re2" % "libre2-java" % "1.0",
-  "com.wikia" %% "utils" % "0.1",
+  "com.wikia" %% "utils" % "0.2",
   "com.wikia" %% "wikifactory" % "0.13",
   "com.typesafe.slick" %% "slick" % "1.0.0",
   "com.twitter" % "finagle-core_2.10" % "6.1.1",
