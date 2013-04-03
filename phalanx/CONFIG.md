@@ -2,14 +2,16 @@
 ## Logging configuration
 * org.slf4j.simpleLogger.defaultLogLevel=info
 Default logging level
-* org.slf4j.simpleLogger.log.Main=info
-* org.slf4j.simpleLogger.log.MainService=debug
-* org.slf4j.simpleLogger.log.NewRelic=warn
-* org.slf4j.simpleLogger.log.RuleSystem=warn
-* org.slf4j.simpleLogger.log.RuleSystemLoader=info
-* org.slf4j.simpleLogger.log.Scribe=info
+* org.slf4j.simpleLogger.log.Main=
+* org.slf4j.simpleLogger.log.MainService=
+* org.slf4j.simpleLogger.log.NewRelic=
+* org.slf4j.simpleLogger.log.RuleSystem=
+* org.slf4j.simpleLogger.log.RuleSystemLoader=
+* org.slf4j.simpleLogger.log.Scribe=
 
 ## Main configuration
+* com.wikia.phalanx.detailedStats=true
+Keep detailed statistics
 * com.wikia.phalanx.notifyNodes=
 Space separated list of other nodes to notify
 * com.wikia.phalanx.port=4666
