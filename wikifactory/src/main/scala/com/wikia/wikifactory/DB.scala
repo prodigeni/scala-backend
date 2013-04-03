@@ -31,10 +31,14 @@ object DB {
   }
 
   def fromWikiTime(dateBytes: Array[Byte]):Option[Time] = if (dateBytes == null) None else fromWikiTime(new String(dateBytes, "ascii"))
-  def fromWikiTime(date: String):Option[Time] = Some(date match {
-    case "infinite" => Time.Top
-    case _ => mediaWikiTimeFormat.parse(date)
-  })
+  def fromWikiTime(date: String):Option[Time] = date match {
+    case "infinite" => Some(Time.Top)
+    case _ => try {
+      Some(mediaWikiTimeFormat.parse(date))
+    } catch {
+      case e:java.text.ParseException => None
+    }
+  }
 
 }
 
