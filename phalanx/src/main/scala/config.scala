@@ -69,4 +69,12 @@ class SysPropConfig {
         (if (r.doc.nonEmpty) s"\n# ${r.doc}\n" else "")+ s"# ${r.key}=${r.default}\n")).mkString
     }).mkString("\n")
   }
+  def markdownHelp(title: String = "Property configuration"):String = {
+    val groups = remembered.values.groupBy(_.group).toSeq.sortBy(_._1)
+    val content = groups.map( {
+      case (groupDoc, props) => (Seq(s"## $groupDoc\n") ++ props.toSeq.sortBy(_.key).map(r =>
+        s"* ${r.key}=${r.default}\n" + (if (r.doc.nonEmpty) s"${r.doc}\n" else ""))).mkString
+    }).mkString("\n")
+    s"# $title\n$content"
+  }
 }

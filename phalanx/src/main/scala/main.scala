@@ -3,14 +3,13 @@ import collection.JavaConversions._
 import com.twitter.conversions.time._
 import com.twitter.finagle.builder.ServerBuilder
 import com.twitter.finagle.http.filter.ExceptionFilter
-import com.twitter.finagle.http.{Http, Request, Status, Version, Response, Message}
+import com.twitter.finagle.http.{Http, Request, Status, Version, Response, Message, RichHttp}
 import com.twitter.finagle.{SimpleFilter, Service}
 import com.twitter.util._
-import com.wikia.wikifactory._
+import com.wikia.wikifactory.DB
 import java.io.{FileInputStream, File}
 import org.jboss.netty.handler.codec.http.HttpResponseStatus
 import util.parsing.json.{JSONObject, JSONArray, JSONFormat}
-import com.twitter.finagle.http.RichHttp
 
 
 class ExceptionLogger[Req, Rep](val logger: NiceLogger) extends SimpleFilter[Req, Rep] {
@@ -83,6 +82,11 @@ object Main extends App {
     println(Config.defaultConfigContents)
     sys.exit(0)
   }
+  if (args.contains("--print-config-help")) {
+    println(Config.markdownHelp("Phalanx properties help"))
+    sys.exit(0)
+  }
+
   final lazy val processors = Runtime.getRuntime.availableProcessors()
 	def loadProperties(fileName: String): java.util.Properties = {
 		val file = new File(fileName)
