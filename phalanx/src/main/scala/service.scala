@@ -15,7 +15,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
   val logger = NiceLogger("MainService")
   var nextExpireDate: Option[Time] = None
   var expireWatchTask: Option[TimerTask] = None
-  val userCacheMaxSize = Configuration.userCacheMaxSize()
+  val userCacheMaxSize = Config.userCacheMaxSize()
   val stats = new StatsGatherer()
   val userCache = new SynchronizedLruMap[String, Seq[DatabaseRuleInfo]](userCacheMaxSize)
   val notifyMap = {
@@ -34,7 +34,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
   }
   val timer = com.twitter.finagle.util.DefaultTimer.twitter
   @transient var rules = reloader(Map.empty, Seq.empty)
-  val threadPoolSize:Int = Configuration.serviceThreadCount() match {
+  val threadPoolSize:Int = Config.serviceThreadCount() match {
     case 0 => Main.processors
     case x => x
   }

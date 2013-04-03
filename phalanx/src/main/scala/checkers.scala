@@ -84,7 +84,7 @@ object InvalidRegex {
 object Checker {
   final val logger = NiceLogger("Checker")
   final val TYPE_USER = 8
-  var groupCount = Configuration.workerGroups() match {
+  var groupCount = Config.workerGroups() match {
     case 0 => Main.processors
     case x => x
   }

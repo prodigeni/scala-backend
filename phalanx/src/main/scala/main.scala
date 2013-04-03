@@ -49,35 +49,40 @@ object Respond {
   val notFound = error("not found", Status.NotFound)
 }
 
-object Configuration extends SysPropConfig {
+object Config extends SysPropConfig {
   private val cwp = "com.wikia.phalanx."
-  object Scribe extends Group("Scribe configuration") {
-    val scribeType = string(cwp+"scribe", "Scribe type: send, buffer or discard", "discard")
-    val host = string(cwp+"scribe.host", "Scribe host name", "")
-    val port = int(cwp+"scribe.port", "Scribe TCP port", 1463)
-    val flushPeriod = int(cwp+"scribe.flushperiod", "Scribe buffer flush period (milliseconds)", 1000)
-  }
-  val port = int(cwp+"port", "HTTP listening port", 4666)
-  val notifyNodes = string(cwp+"notifyNodes", "Space separated list of other nodes to notify", "")
-  val userCacheMaxSize = int("userCacheMaxSize", "Size of LRU cache for user matching", (2 << 16)-1)
-  val serviceThreadCount = int(cwp+"serviceThreadCount", "Number of main service threads, or 0 for auto value", 0)
-  val workerGroups = int(cwp+"workerGroups", "Split each matching work into n parallel groups, or 0 for auto value", 0)
+  private val sl = "org.slf4j.simpleLogger."
 
-  object Log extends Group("Logging configuration") {
-    private val sl = "org.slf4j.simpleLogger."
-    string(sl+"defaultLogLevel", "Default logging level", "info")
-    string(sl+"log.Main", "", "info")
-    string(sl+"log.MainService", "", "debug")
-    string(sl+"log.NewRelic", "", "warn")
-    string(sl+"log.RuleSystem", "", "warn")
-    string(sl+"log.RuleSystemLoader", "", "info")
-    string(sl+"log.Scribe", "", "info")
-  }
+  val Main = Group("Main configuration")
+  val port = Main.int(cwp+"port", "HTTP listening port", 4666)
+  val notifyNodes = Main.string(cwp+"notifyNodes", "Space separated list of other nodes to notify", "")
+  val userCacheMaxSize = Main.int(cwp+"userCacheMaxSize", "Size of LRU cache for user matching", (2 << 16)-1)
+  val serviceThreadCount = Main.int(cwp+"serviceThreadCount", "Number of main service threads, or 0 for auto value", 0)
+  val workerGroups = Main.int(cwp+"workerGroups", "Split each matching work into n parallel groups, or 0 for auto value", 0)
+
+  val Scribe = Group("Scribe configuration")
+  val scribeType = Scribe.string(cwp+"scribe", "Scribe type: send, buffer or discard", "discard")
+  val scribeHost = Scribe.string(cwp+"scribe.host", "Scribe host name", "localhost")
+  val scribePort = Scribe.int(cwp+"scribe.port", "Scribe TCP port", 1463)
+  val flushPeriod = Scribe.int(cwp+"scribe.flushperiod", "Scribe buffer flush period (milliseconds)", 1000)
+
+  val Log = Group("Logging configuration")
+  Log.string(sl+"defaultLogLevel", "Default logging level", "info")
+  Log.string(sl+"log.Main", "", "info")
+  Log.string(sl+"log.MainService", "", "debug")
+  Log.string(sl+"log.NewRelic", "", "warn")
+  Log.string(sl+"log.RuleSystem", "", "warn")
+  Log.string(sl+"log.RuleSystemLoader", "", "info")
+  Log.string(sl+"log.Scribe", "", "info")
 }
 
 
 
 object Main extends App {
+  if (args.contains("--print-defaults")) {
+    println(Config.defaultConfigContents)
+    sys.exit(0)
+  }
   final lazy val processors = Runtime.getRuntime.availableProcessors()
 	def loadProperties(fileName: String): java.util.Properties = {
 		val file = new File(fileName)
@@ -87,7 +92,7 @@ object Main extends App {
 		properties
 	}
 	def scribeClient() = {
-		new ScribeClient("log_phalanx", Configuration.Scribe.host(), Configuration.Scribe.port())
+		new ScribeClient("log_phalanx", Config.scribeHost(), Config.scribePort())
 	}
 
 	val cfName: Option[String] = sys.props.get("phalanx.config") orElse {
@@ -121,16 +126,16 @@ object Main extends App {
 	logger.info("Preloaded " + preloaded.size + " classes")
 
 	val scribe = {
-		val scribetype = Configuration.Scribe.scribeType()
+		val scribetype = Config.scribeType()
 		logger.info("Creating scribe client (" + scribetype + ")")
 		scribetype match {
 			case "send" => scribeClient()
-			case "buffer" => new ScribeBuffer(scribeClient(), Configuration.Scribe.flushPeriod().milliseconds)
+			case "buffer" => new ScribeBuffer(scribeClient(), Config.flushPeriod().milliseconds)
 			case "discard" => new ScribeDiscard()
 		}
 	}
-	val port = Configuration.port()
-  val notifyNodes = Configuration.notifyNodes() match {
+	val port = Config.port()
+  val notifyNodes = Config.notifyNodes() match {
     case s: String if (s != null && s.nonEmpty) => s.split(' ').toSeq
     case _ => Seq.empty
   }

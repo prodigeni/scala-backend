@@ -7,15 +7,16 @@ class SysPropConfig {
   outer =>
   protected type FValue[+T] = () => T
   protected def get(key: String):Option[String] = sys.props.get(key)
-  case class Remembered(group: String, key:String, doc:String, default:String, getter:FValue[Any]) {
+  protected case class Remembered(group: String, key:String, doc:String, default:String, getter:FValue[Any]) {
   }
   protected def remember[T](group: String, key:String, doc:String, default:String, getter:FValue[T]):FValue[T] = {
+    assert(!remembered.contains(key))
     remembered(key) = Remembered(group, key, doc, default, getter)
     getter
   }
   protected val remembered = collection.mutable.HashMap.empty[String, Remembered]
 
-  def bool(key:String, doc: String, default:Boolean, group:String = ""):FValue[Boolean] = {
+  def bool(key:String, doc: String, default:Boolean, group:String):FValue[Boolean] = {
     remember(group, key, doc, default.toString,
       () => get(key) match {
         case Some("true") => true
@@ -31,7 +32,7 @@ class SysPropConfig {
         case None => default
       })
   }
-  def string(key:String, doc: String, default:String, group:String = ""):FValue[String] = {
+  def string(key:String, doc: String, default:String, group:String):FValue[String] = {
     remember(group, key, doc, default.toString,
       () => get(key) match {
         case Some("") => default
@@ -39,7 +40,7 @@ class SysPropConfig {
         case None => default
       })
   }
-  def int(key:String, doc: String, default:Int, group:String = ""):FValue[Int] = {
+  def int(key:String, doc: String, default:Int, group:String):FValue[Int] = {
     remember(group, key, doc, default.toString,
       () => get(key) match {
         case Some("") => default
@@ -51,7 +52,7 @@ class SysPropConfig {
         case None => default
       })
   }
-  class Group(groupDoc:String) {
+  case class Group(groupDoc:String) {
     def bool(key:String, doc: String, default:Boolean):FValue[Boolean] = outer.bool(key, doc, default, groupDoc)
     def string(key:String, doc: String, default:String):FValue[String] = outer.string(key, doc, default, groupDoc)
     def int(key:String, doc: String, default:Int):FValue[Int] = outer.int(key, doc, default, groupDoc)
@@ -64,9 +65,8 @@ class SysPropConfig {
   def defaultConfigContents: String = {
     val groups = remembered.values.groupBy(_.group).toSeq.sortBy(_._1)
     groups.map( {
-      case (groupDoc, props) => {
-
-      }
+      case (groupDoc, props) => (Seq(if (groupDoc.nonEmpty) s"# $groupDoc\n" else "") ++ props.toSeq.sortBy(_.key).map(r =>
+        (if (r.doc.nonEmpty) s"\n# ${r.doc}\n" else "")+ s"# ${r.key}=${r.default}\n")).mkString
     }).mkString("\n")
   }
 }
