@@ -25,11 +25,17 @@ object DB {
   val mediaWikiTimeFormat = new TimeFormat("yyyyMMddHHmmss")
 
   def wikiCurrentTime = toWikiTime(Time.now)
-  def toWikiTime(date: Time):String = mediaWikiTimeFormat.format(date)
-  def fromWikiTime(dateBytes: Array[Byte]):Option[Time] = {
-    if (dateBytes == null) None else Some(mediaWikiTimeFormat.parse(new String(dateBytes, "ascii")))
+  def toWikiTime(date: Time):String = date match {
+    case Time.Top => "infinite"
+    case _ => mediaWikiTimeFormat.format(date)
   }
-  def fromWikiTime(date: String):Option[Time] = fromWikiTime(date.toCharArray.map(_.toByte))
+
+  def fromWikiTime(dateBytes: Array[Byte]):Option[Time] = if (dateBytes == null) None else fromWikiTime(new String(dateBytes, "ascii"))
+  def fromWikiTime(date: String):Option[Time] = Some(date match {
+    case "infinite" => Time.Top
+    case _ => mediaWikiTimeFormat.parse(date)
+  })
+
 }
 
 case class dbException( msg:String ) extends Exception

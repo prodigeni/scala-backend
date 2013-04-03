@@ -20,6 +20,11 @@ class DBTests extends FlatSpec {
     assert( DB.toWikiTime(tDate) === wikiDate)
   }
 
+  "infinite" should "be handled property" in {
+    assert(DB.fromWikiTime("infinite") === Some(Time.Top))
+    assert(DB.toWikiTime(Time.Top) == "infinite")
+  }
+
 }
 
 
