@@ -6,7 +6,7 @@ import com.twitter.finagle.builder.ServerBuilder
 import com.twitter.finagle.http.filter.ExceptionFilter
 import com.twitter.finagle.http.{Http, Request, Status, Version, Response, Message, RichHttp}
 import com.twitter.finagle.{SimpleFilter, Service}
-import com.twitter.util.{Future}
+import com.twitter.util.Future
 import com.wikia.utils.SysPropConfig
 import com.wikia.wikifactory.DB
 import java.io.{FileInputStream, File}
@@ -54,21 +54,30 @@ object Config extends SysPropConfig {
   private val cwp = "com.wikia.phalanx."
   private val sl = "org.slf4j.simpleLogger."
 
-  val Main = Group("Main configuration")
-  val port = Main.int(cwp+"port", "HTTP listening port", 4666)
-  val notifyNodes = Main.string(cwp+"notifyNodes", "Space separated list of other nodes to notify", "")
-  val userCacheMaxSize = Main.int(cwp+"userCacheMaxSize", "Size of LRU cache for user matching", (2 << 16)-1)
-  val serviceThreadCount = Main.int(cwp+"serviceThreadCount", "Number of main service threads, or 0 for auto value", 0)
-  val workerGroups = Main.int(cwp+"workerGroups", "Split each matching work into n parallel groups, or 0 for auto value", 0)
-  val detailedStats = Main.bool(cwp+"detailedStats", "Keep detailed statistics", true)
+  val Performance = Group("Performance tuning")
+  val userCacheMaxSize = Performance.int(cwp+"userCacheMaxSize", "Size of LRU cache for user matching", (2 << 16)-1)
+  val serviceThreadCount = Performance.int(cwp+"serviceThreadCount", "Number of main service threads, or 0 for auto value", 0)
+  val workerGroups = Performance.int(cwp+"workerGroups", "Split each matching work into n parallel groups, or 0 for auto value", 0)
+  val detailedStats = Performance.bool(cwp+"detailedStats", "Keep detailed statistics", true)
 
-  val Scribe = Group("Scribe configuration")
+  val Network = Group("Network configuration")
+  val port = Network.int(cwp+"port", "HTTP listening port", 4666)
+  val notifyNodes = Network.string(cwp+"notifyNodes", "Space separated list of other nodes to notify", "")
+  val maxConcurrentRequests = Network.int(cwp+"maxConcurrentRequests", "Netty: maximum requests server at the same time", 100)
+  val sendBufferSize = Network.int(cwp+"sendBufferSize", "Netty send buffer size", 128*1024)
+  val recvBufferSize = Network.int(cwp+"recvBufferSize", "Netty reveive buffer size", 512*1024)
+  val cancelOnHangup = Network.bool(cwp+"cancelOnHangup", "Cancel requests if connection lost", true)
+  val backlog = Network.int(cwp+"backlog", "Listening socket backlog size", 1000)
+  val keepAlive = Network.bool(cwp+"keepAlive", "Use HTTP 1.1 keep alives", true)
+  val maxIdleTime = Network.int(cwp+"maxIdleTime", "How long to wait before closing a keep alive connection, in seconds", 3)
+
+  val Scribe = Group("Scribe configuration - used to relay information about successful matches")
   val scribeType = Scribe.string(cwp+"scribe", "Scribe type: send, buffer or discard", "discard")
   val scribeHost = Scribe.string(cwp+"scribe.host", "Scribe host name", "localhost")
   val scribePort = Scribe.int(cwp+"scribe.port", "Scribe TCP port", 1463)
   val flushPeriod = Scribe.int(cwp+"scribe.flushperiod", "Scribe buffer flush period (milliseconds)", 1000)
 
-  val Log = Group("Logging configuration")
+  val Log = Group("Logging configuration (using slf4j simpleLogger)")
   Log.string(sl+"defaultLogLevel", "Default logging level", "info")
   Log.string(sl+"log.Main", "", "")
   Log.string(sl+"log.MainService", "", "")
@@ -159,13 +168,13 @@ object Main extends App {
 	val config = ServerBuilder()
 		.codec(RichHttp[Request](Http()))
 		.name("Phalanx")
-    .maxConcurrentRequests(600)
-		.sendBufferSize(64*1024)
-		.recvBufferSize(512*1024)
-    .cancelOnHangup(true)
-		.backlog(1000)
-    .keepAlive(true)
-    .hostConnectionMaxIdleTime(3.seconds)
+    .maxConcurrentRequests(Config.maxConcurrentRequests())
+		.sendBufferSize(Config.sendBufferSize())
+		.recvBufferSize(Config.recvBufferSize())
+    .cancelOnHangup(Config.cancelOnHangup())
+		.backlog(Config.backlog())
+    .keepAlive(Config.keepAlive())
+    .hostConnectionMaxIdleTime(Config.maxIdleTime().seconds)
 		.bindTo(new java.net.InetSocketAddress(port))
 
 	val server = config.build(ExceptionFilter andThen NewRelic andThen mainService)

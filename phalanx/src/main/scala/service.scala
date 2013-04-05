@@ -18,14 +18,17 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
   var expireWatchTask: Option[TimerTask] = None
   val userCacheMaxSize = Config.userCacheMaxSize()
   val stats:StatsGatherer = if (Config.detailedStats()) new RealGatherer() else new NullGatherer()
-  val userCache = new SynchronizedLruMap[String, Seq[DatabaseRuleInfo]](userCacheMaxSize)
+  val userCache:collection.mutable.Map[String, Seq[DatabaseRuleInfo]] = new SynchronizedLruMap[String, Seq[DatabaseRuleInfo]](userCacheMaxSize)
   val notifyMap = {
-    val hostname = java.net.InetAddress.getLocalHost.getHostName
-    logger.debug(s"Local hostname: $hostname")
-    notifyNodes.filterNot(x => x == hostname).map( node => {
+    val localhost = java.net.InetAddress.getLocalHost.getHostName
+    logger.debug(s"Local hostname: $localhost")
+    notifyNodes.filterNot(_.startsWith(localhost)).map( node => {
+      val parts = node.split(":")
+      val hostname = parts.head
+      val port = parts.tail.headOption.map(_.toInt).getOrElse(4666)
       val client = ClientBuilder()
         .codec(Http())
-        .hosts(new java.net.InetSocketAddress(node, 4666)) // TODO: port hardcoded for now
+        .hosts(new java.net.InetSocketAddress(hostname, port))
         .hostConnectionLimit(1)
         .daemon(true)
         .build()
