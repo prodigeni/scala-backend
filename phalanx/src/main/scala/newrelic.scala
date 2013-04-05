@@ -6,7 +6,7 @@ package com.wikia.phalanx
 import com.newrelic.api.agent
 import com.twitter.finagle.http.{Request, Response}
 import com.twitter.finagle.{Service, SimpleFilter}
-import com.twitter.util.{Duration, Time}
+import com.twitter.util.Duration
 import org.slf4j.LoggerFactory
 
 case class NewRelicReq(name:String) extends agent.Request {
@@ -36,28 +36,28 @@ abstract class NewRelicHttpFilter extends SimpleFilter[Request, Response] {
 	def classifier(request: Request):String
 	def timeString(duration: Duration) = duration.inMillis.toString + "ms"
 	def apply(request: Request, service: Service[Request, Response]) = {
-		val start = Time.now
+    val elapsed = com.twitter.util.Stopwatch.start()
 		val name = classifier(request)
 		val nReq = NewRelicReq(name)
 		val future = service(request)
 		future.onSuccess { response =>
-			val duration = Time.now - start
+			val duration = elapsed()
 			logger.trace(name + " " + timeString(duration))
 			reportOk(nReq, duration, NewRelicOK(response))
 		}
 			.onFailure { e =>
-			val duration = Time.now - start
+			val duration = elapsed()
 			logger.warn(name + " " + timeString(duration), e)
 			reportErr(nReq, duration, e)
 		}
 	}
-	@agent.Trace(dispatcher=true)
+	@agent.Trace(dispatcher=false)
 	def reportOk(req:NewRelicReq, duration:Duration, resp: NewRelicResponse) {
 		agent.NewRelic.setTransactionName(null, req.name)
 		agent.NewRelic.setRequestAndResponse(req, resp)
 		agent.NewRelic.recordResponseTimeMetric(req.name, duration.inMillis)
 	}
-	@agent.Trace(dispatcher=true)
+	@agent.Trace(dispatcher=false)
 	def reportErr(req:NewRelicReq, duration:Duration, e:Throwable) {
 		agent.NewRelic.setTransactionName(null, req.name)
 		agent.NewRelic.setRequestAndResponse(req, NewRelicError(e))

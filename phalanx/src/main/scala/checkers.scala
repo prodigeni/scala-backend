@@ -85,15 +85,11 @@ object Checker {
   final val logger = NiceLogger("Checker")
   final val TYPE_USER = 8
   var groupCount = Config.workerGroups() match {
-    case 0 => Main.processors
+    case 0 => Seq(1, Main.processors/2).max
     case x => x
   }
   def splitIntoGroups(whole: Iterable[String]):Iterable[Iterable[String]] = {
-    if (groupCount==1) Seq(whole) else {
-      val all = whole.toSeq
-      val groupSize = Seq(all.size / groupCount, 1).max
-      all.grouped(groupSize).toIterable
-    }
+    if (groupCount<=1) Seq(whole) else whole.toSeq.sorted.grouped(Seq(whole.size / groupCount, 1).max).toIndexedSeq
   }
   def regex(caseType: CaseType, text: String, longContent:Boolean):Checker = {
     InvalidRegex.checkForError(text) match {

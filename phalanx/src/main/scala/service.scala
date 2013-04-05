@@ -39,7 +39,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
   val timer = com.twitter.finagle.util.DefaultTimer.twitter
   @transient var rules = reloader(Map.empty, Seq.empty)
   val threadPoolSize:Int = Config.serviceThreadCount() match {
-    case 0 => Main.processors
+    case 0 => Seq(1, Main.processors/2).max
     case x => x
   }
   val futurePool = if (threadPoolSize <= 0) {FuturePool.immediatePool} else {
@@ -130,7 +130,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
     }).mkString("\n")
     val response =  Seq(Main.versionString,
       s"Next rule expire date:${nextExpireDate.getOrElse("not set")}",
-      s"NewRelic environment: ${sys.props.getOrElse("newrelic.environment", "not set")}",
+      s"NewRelic environment: ${sys.props.getOrElse("newrelic.environment", "not set")} (${if (Config.newRelic() && sys.props.get("newrelic.environment").nonEmpty) "enabled" else "disabled"})",
       s"Processor count: ${Main.processors}",
       s"Max memory: ${sys.runtime.maxMemory().humanReadableByteCount}",
       s"Free memory: ${sys.runtime.freeMemory().humanReadableByteCount}",
@@ -174,9 +174,9 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
   def apply(request: Request): Future[Response] = {
     stripPath(request) match {
       case "" => Future(Respond("PHALANX ALIVE"))
-      case "match" => futurePool(MatchRequest(request).response)
-      case "check" => futurePool(CheckRequest(request).response)
-      case "validate" => futurePool(validateRegex(request))
+      case "match" => futurePool { MatchRequest(request).response }
+      case "check" => futurePool { CheckRequest(request).response }
+      case "validate" => futurePool { validateRegex(request) }
       case "reload" => reloadPool(reload(request, true))
       case "notify" => reloadPool(reload(request, false))
       case "stats/total" => stats(Respond(stats.totalTime))
@@ -294,7 +294,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
     }
     val timeRanges = Seq(0.microseconds, 100.microseconds,
       1.millis, 3.millis, 10.millis, 30.millis, 100.millis, 300.millis,
-      1.seconds, 3.seconds, 10.seconds, 30.seconds, 1.minute, Duration.Top).toIndexedSeq//.sliding(2).toIndexedSeq
+      1.seconds, 3.seconds, 10.seconds, 30.seconds, 1.minute, Duration.Top).toIndexedSeq
     def newTimeCounts() = collection.mutable.ArrayBuffer.fill(timeRanges.length)(0L)
     var timeCounts = newTimeCounts()
     val pool = FuturePool(java.util.concurrent.Executors.newSingleThreadExecutor())

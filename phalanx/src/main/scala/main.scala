@@ -59,17 +59,19 @@ object Config extends SysPropConfig {
   val serviceThreadCount = Performance.int(cwp+"serviceThreadCount", "Number of main service threads, or 0 for auto value", 0)
   val workerGroups = Performance.int(cwp+"workerGroups", "Split each matching work into n parallel groups, or 0 for auto value", 0)
   val detailedStats = Performance.bool(cwp+"detailedStats", "Keep detailed statistics", true)
+  val newRelic = Performance.bool(cwp+"newRelic", "Enable NewRelic (only if NewRelic agent is loaded and environment set)", true)
+
 
   val Network = Group("Network configuration")
   val port = Network.int(cwp+"port", "HTTP listening port", 4666)
   val notifyNodes = Network.string(cwp+"notifyNodes", "Space separated list of other nodes to notify", "")
-  val maxConcurrentRequests = Network.int(cwp+"maxConcurrentRequests", "Netty: maximum requests server at the same time", 100)
+  val maxConcurrentRequests = Network.int(cwp+"maxConcurrentRequests", "Netty: maximum requests served at the same time", 100)
   val sendBufferSize = Network.int(cwp+"sendBufferSize", "Netty send buffer size", 128*1024)
   val recvBufferSize = Network.int(cwp+"recvBufferSize", "Netty reveive buffer size", 512*1024)
   val cancelOnHangup = Network.bool(cwp+"cancelOnHangup", "Cancel requests if connection lost", true)
   val backlog = Network.int(cwp+"backlog", "Listening socket backlog size", 1000)
   val keepAlive = Network.bool(cwp+"keepAlive", "Use HTTP 1.1 keep alives", true)
-  val maxIdleTime = Network.int(cwp+"maxIdleTime", "How long to wait before closing a keep alive connection, in seconds", 3)
+  val maxIdleTime = Network.int(cwp+"maxIdleTime", "How long to wait before closing a keep alive connection, in seconds", 1)
 
   val Scribe = Group("Scribe configuration - used to relay information about successful matches")
   val scribeType = Scribe.string(cwp+"scribe", "Scribe type: send, buffer or discard", "discard")
@@ -177,7 +179,14 @@ object Main extends App {
     .hostConnectionMaxIdleTime(Config.maxIdleTime().seconds)
 		.bindTo(new java.net.InetSocketAddress(port))
 
-	val server = config.build(ExceptionFilter andThen NewRelic andThen mainService)
+  def buildService = {
+    sys.props.get("newrelic.environment") match {
+      case Some(x) if Config.newRelic() => ExceptionFilter andThen NewRelic andThen mainService
+      case _ => ExceptionFilter andThen mainService
+    }
+  }
+
+	val server = config.build(buildService)
 	logger.info(s"Listening on port: $port")
 	logger.trace("Initial stats: \n" + mainService.statsString)
 

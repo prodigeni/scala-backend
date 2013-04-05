@@ -52,8 +52,8 @@ package object phalanx {
     TimeUnit.MINUTES,
     TimeUnit.SECONDS,
     TimeUnit.MILLISECONDS,
-    TimeUnit.MICROSECONDS,
-    TimeUnit.NANOSECONDS)
+    TimeUnit.MICROSECONDS
+    )
   implicit class NiceDuration(val d:Duration) {
     def niceString(parts:Int = 2):String = {
       d match {
