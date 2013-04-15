@@ -6,7 +6,7 @@ name := "phalanx"
 
 organization := "com.wikia"
 
-version := "0.21"
+version := "0.22"
 
 version ~= { (s) => {
   import scala.sys.process._
