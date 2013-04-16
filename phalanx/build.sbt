@@ -18,6 +18,7 @@ scalaVersion := "2.10.1"
 
 resolvers ++= Seq(
 	"Wikia Maven repository" at "http://pkg-s1.wikia-prod/maven/releases/",
+	"szumo.net Maven repository" at "http://www.szumo.net/maven/",
 	"NewRelic agent API" at "http://download.newrelic.com"
 )
 
@@ -37,7 +38,7 @@ publishTo <<= (version) { version: String =>
 
 libraryDependencies ++= Seq(
   "com.logentries.re2" % "libre2-java" % "1.0",
-  "net.szumo" %% "fstl-oc" % "SNAPSHOT",
+  "net.szumo" %% "fstl-oc" % "0.1",
   "com.wikia" %% "utils" % "0.2",
   "com.wikia" %% "wikifactory" % "0.13",
   "com.typesafe.slick" %% "slick" % "1.0.0",
