@@ -66,6 +66,7 @@ class RuleTests extends FlatSpec {
 	}
 	it should "work combined" in {
 		checkSystem(orig.combineRules)
+
 	}
 }
 

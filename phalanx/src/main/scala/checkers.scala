@@ -51,6 +51,15 @@ case class SetExactChecker(caseType: CaseType, origTexts: Iterable[String]) exte
 	def description(long: Boolean = false): String = "exact set of " + texts.size + " phrases"
 }
 
+case class FSTLChecker(caseType: CaseType, origTexts: Iterable[String]) extends Checker {
+  val texts = origTexts.toSet
+  import net.szumo.fstl.StringMatcher
+  val matcher = StringMatcher(texts, StringMatcher.caseType(caseType == CaseSensitive))
+  def isMatch(s: Checkable): Boolean = matcher.isMatch(s.text)
+  override def toString = "FSTLChecker(" + texts.size + ")"
+  def description(long: Boolean = false): String = "contains set of " + texts.size + " phrases"
+}
+
 case class JavaRegexChecker(caseType: CaseType, text: String) extends Checker {
   import java.util.regex.Pattern
   final val CSPatternOptions = Pattern.UNICODE_CASE | Pattern.DOTALL
@@ -88,6 +97,10 @@ object Checker {
     case 0 => Seq(1, Main.processors/2).max
     case x => x
   }
+  val regexSpecialChars = Seq("[", "$", "^", "(", "|", ".", "+", "*", "?", "\\")
+  def needsRealRegex(pattern:String):Boolean = {
+    regexSpecialChars.exists(s => pattern.contains(s))
+  }
   def splitIntoGroups(whole: Iterable[String]):Iterable[Iterable[String]] = {
     if (groupCount<=1) Seq(whole) else whole.toSeq.sorted.grouped(Seq(whole.size / groupCount, 1).max).toIndexedSeq
   }
@@ -96,11 +109,16 @@ object Checker {
       case Some(s) => throw new InvalidRegex(s, null)
       case _ => ()
     }
+    val pattern = text.stripSuffix(".*").stripPrefix(".*")
+    if (needsRealRegex(pattern)) {
     //if (longContent) Re2RegexChecker(caseType,text) else JavaRegexChecker(caseType, text)
-    Re2RegexChecker(caseType,text)
+      Re2RegexChecker(caseType, pattern)
+    } else {
+      ContainsChecker(caseType, pattern)
+    }
   }
   def regex(caseType: CaseType, alternatives: Iterable[String]):Checker = regex(caseType, alternatives.mkString("|"), true)
-  def regex(caseType: CaseType, text: String, typeMask:Int):Checker = regex(caseType, text, (typeMask & TYPE_USER) != 0)
+  def regex(caseType: CaseType, text: String, typeMask:Int):Checker =  regex(caseType, text, (typeMask & TYPE_USER) != 0)
   def contains(caseType: CaseType, text: String):Checker = ContainsChecker(caseType, text)
   def exact(caseType: CaseType, text: String):Checker = ExactChecker(caseType, text)
   def combine(checkers: Iterable[Checker]):Iterable[Checker] = {
@@ -112,15 +130,22 @@ object Checker {
     val exactPattern:PartialFunction[Checker, String] = (checker:Checker) => checker match {
       case ExactChecker(_, text) => text
     }
+    val containsPattern:PartialFunction[Checker, String] = (checker:Checker) => checker match {
+      case ContainsChecker(_, text) => text
+    }
     // using those functions as keys in the map
     type func = Iterable[Checker] => Iterable[Checker]
     val exactCs: func = checkers => Seq(SetExactChecker(CaseSensitive, checkers.collect(exactPattern)))
     val exactCi: func = checkers => Seq(SetExactChecker(CaseInsensitive, checkers.collect(exactPattern)))
+    val fstlCi:  func = checkers => Seq(FSTLChecker(CaseInsensitive, checkers.collect(containsPattern)))
+    val fstlCs:  func = checkers => Seq(FSTLChecker(CaseSensitive, checkers.collect(containsPattern)))
     val regexCS: func = checkers => splitIntoGroups(checkers.collect(regexPattern)).map(regex(CaseSensitive,_))
     val regexCI: func = checkers => splitIntoGroups(checkers.collect(regexPattern)).map(regex(CaseInsensitive,_))
     val result = checkers.groupBy(checker => checker match {
       case ExactChecker(CaseSensitive, _) => exactCs
       case ExactChecker(CaseInsensitive, _) => exactCi
+      case ContainsChecker(CaseSensitive, _) => fstlCs
+      case ContainsChecker(CaseInsensitive, _) => fstlCi
       case c:Checker if c.caseType == CaseSensitive => regexCS
       case c:Checker if c.caseType == CaseInsensitive => regexCI
     }).toSeq.map(pair => pair._1(pair._2))
