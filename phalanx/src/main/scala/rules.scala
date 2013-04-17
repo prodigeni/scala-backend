@@ -5,10 +5,9 @@ import com.twitter.util.Time
 import util.parsing.json.JSONObject
 import collection.parallel.immutable.ParSeq
 
-class RuleViolation(val rules: Iterable[DatabaseRuleInfo]) extends Exception {
-	def ruleIds = rules.map(rule => rule.dbId)
+class RuleViolation(rule: DatabaseRuleInfo) extends Exception {
+	def ruleIds = Seq(rule.dbId)
 }
-
 
 case class Checkable(text: String, language: String = "en") {
 	val lcText = text.toLowerCase
@@ -31,7 +30,6 @@ object CaseInsensitive extends CaseType {
 	def apply(s: String) = s.toLowerCase
 	override def toString = "CI"
 }
-
 
 object DatabaseRuleInfo {
 	// check if the text contains any letters at all
@@ -69,11 +67,10 @@ trait DatabaseRuleInfo {
 }
 
 trait Rule {
-	def isMatch(s: Checkable): Boolean
-	def allMatches(s: Checkable): Iterable[DatabaseRuleInfo]
+	def firstMatch(s: Checkable): Option[DatabaseRule]
 	def check(s: Checkable) {
-		val m = allMatches(s)
-		if (m.nonEmpty) throw new RuleViolation(m)
+		val m = firstMatch(s)
+		if (m.nonEmpty) throw new RuleViolation(m.get)
 	}
 }
 
@@ -93,8 +90,7 @@ case class DatabaseRule(text: String, dbId: Int, reason: String, caseSensitive: 
 			if (exact) Checker.exact(caseType, caseType(text)) else Checker.contains(caseType, caseType(text))
 		}
 	}
-	def allMatches(s: Checkable): Iterable[DatabaseRuleInfo] = if (isMatch(s)) Some(this) else None
-	def isMatch(s: Checkable): Boolean = (this.language.isEmpty || s.language == this.language.get) && checker.isMatch(s)
+	def firstMatch(s: Checkable): Option[DatabaseRule] = if ((this.language.isEmpty || s.language == this.language.get) && checker.isMatch(s)) Some(this) else None
   override def toString = s"Rule($dbId, $text, $checker)"
 	assert(language.isEmpty || language.get != "")
 
@@ -106,14 +102,15 @@ trait RuleSystem extends Rule {
 	def stats: Iterable[String]
 	def rules: Iterable[DatabaseRule]
 	def expiring: IndexedSeq[DatabaseRuleInfo]
+  def checkerDescriptions: Iterable[String] = Seq.empty
 }
 
 class FlatRuleSystem(initialRules: Iterable[DatabaseRule]) extends RuleSystem {
+  val logger = NiceLogger("RuleSystem")
 	val rules = initialRules.toSet
 	val ruleStream = initialRules.toIndexedSeq.sortBy(_.text.length).toStream
 	val expiring = rules.filter(r => r.expires.isDefined).toIndexedSeq.sortBy((r: DatabaseRuleInfo) => r.expires.get)
-	def isMatch(s: Checkable): Boolean = rules.exists(_.isMatch(s))
-	def allMatches(s: Checkable) = ruleStream.flatMap((x: DatabaseRule) => x.allMatches(s))
+	def firstMatch(s: Checkable) = ruleStream.flatMap((x: DatabaseRule) => x.firstMatch(s)).headOption
 	def combineRules: CombinedRuleSystem = new CombinedRuleSystem(initialRules)
 	def copy(rules: Iterable[DatabaseRule]): RuleSystem = new FlatRuleSystem(rules)
 	def reloadRules(added: Iterable[DatabaseRule], deletedIds: Iterable[Int]): RuleSystem = {
@@ -144,22 +141,17 @@ class FlatRuleSystem(initialRules: Iterable[DatabaseRule]) extends RuleSystem {
 }
 
 class CombinedRuleSystem(initialRules: Iterable[DatabaseRule]) extends FlatRuleSystem(initialRules) {
-  type checkerSeq = ParSeq[Checker]
-	private val logger = NiceLogger("RuleSystem")
+  type checkerSeq = ParSeq[MultiChecker]
 	val checkers: Map[Option[String], checkerSeq] = extractCheckers.withDefaultValue(ParSeq.empty)
 	def extractCheckers: Map[Option[String], checkerSeq] = {
 		val groupedByLang = initialRules.groupBy(rule => rule.language)
-		val result = for ((lang, rs) <- groupedByLang) yield (lang, Checker.combine(rs.map(_.checker)).toIndexedSeq.par)
+		val result = for ((lang, rs) <- groupedByLang) yield (lang, Checker.combine(rs).toIndexedSeq.par)
 		result.toMap
 	}
 	override def copy(rules: Iterable[DatabaseRule]) = new CombinedRuleSystem(rules)
-	override def isMatch(s: Checkable): Boolean = {
-		val result = checkers(None).exists (_.isMatch(s)) || checkers(Some(s.language)).exists(_.isMatch(s))
-		logger.debug(s"isMatch result for $s: $result")
-		result
-	}
-	override def allMatches(s: Checkable): Iterable[DatabaseRuleInfo] = {
-		if (isMatch(s)) ruleStream flatMap (x => x.allMatches(s)) else Seq.empty[DatabaseRuleInfo]
+	override def firstMatch(s: Checkable): Option[DatabaseRule] = {
+    val toCheck = checkers(None) ++ checkers(Some(s.language))
+    toCheck.flatMap(c => c.firstMatch(s)).headOption
 	}
 	override def combineRules: CombinedRuleSystem = this
 	override def ruleStats: Iterable[String] = {
@@ -181,6 +173,16 @@ class CombinedRuleSystem(initialRules: Iterable[DatabaseRule]) extends FlatRuleS
 		val checkerCount = checkers.values.map(t => t.size).sum
 		Seq((Seq("CombinedRuleSystem", "with", "total", rules.size, "rules", "and", checkerCount, "checkers").mkString(" "))) ++ ruleStats
 	}
+  override def checkerDescriptions = {
+    val c = checkers(None).seq.toSeq.sortBy(c => c.getClass.getCanonicalName)
+    c.map(checker => checker match {
+      case re2: Re2RegexMultiChecker => Seq(s"Re2 checker (${re2.rules.size} rules):") ++
+        re2.rules.sortBy(r => r.text).map(r => s"    ${r.dbId}: ${r.text}")
+      //case fstl: FSTLChecker => Seq(s"FSTL checker (${fstl.caseType} ${fstl.texts.size} rules,  ${fstl.matcher.size} nodes):") ++
+      //  fstl.texts.values.toSeq.sortBy(r=> r.text).map(r => s"    ${r.dbId}: ${r.text}")
+      case _ => Seq.empty
+    }).flatten
+  }
 }
 
 

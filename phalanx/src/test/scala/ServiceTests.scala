@@ -95,7 +95,7 @@ class ServiceTests extends FlatSpec {
 			assert(content === "failure\n")
 		}
 	}
-  val matchedRules = "[{\"regex\" : false, \"expires\" : \"20990101120000\", \"text\" : \"fuck\", \"reason\" : \"\", \"exact\" : false, \"caseSensitive\" : false, \"id\" : 4, \"language\" : \"\", \"authorId\" : 0, \"type\" : 8}]"
+  val matchedRules = "[{\"regex\" : true, \"expires\" : \"20990101120000\", \"text\" : \"^fuck\", \"reason\" : \"\", \"exact\" : false, \"caseSensitive\" : false, \"id\" : 589, \"language\" : \"\", \"authorId\" : 0, \"type\" : 8}]"
 
 	it should "return good JSON for /match" in {
 		checkScribe {

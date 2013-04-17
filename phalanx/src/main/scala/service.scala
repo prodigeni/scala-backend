@@ -18,7 +18,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
   var expireWatchTask: Option[TimerTask] = None
   val userCacheMaxSize = Config.userCacheMaxSize()
   val stats:StatsGatherer = if (Config.detailedStats()) new RealGatherer() else new NullGatherer()
-  val userCache:collection.mutable.Map[String, Seq[DatabaseRuleInfo]] = new SynchronizedLruMap[String, Seq[DatabaseRuleInfo]](userCacheMaxSize)
+  val userCache:collection.mutable.Map[String, Option[DatabaseRuleInfo]] = new SynchronizedLruMap[String, Option[DatabaseRuleInfo]](userCacheMaxSize)
   val notifyMap = {
     val localhost = java.net.InetAddress.getLocalHost.getHostName
     logger.debug(s"Local hostname: $localhost")
@@ -142,6 +142,12 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
     ).mkString("\n")
     response
   }
+  def checkerDescriptions: String = {
+    rules.toSeq.filter(t => t._1 == "user" || t._1 == "content").map(t => {
+      val (s, ruleSystem) = t
+      s + ":\n" + ruleSystem.checkerDescriptions.map("  "+_).mkString("\n")
+    }).mkString("\n")
+  }
   def viewRule(request: Request): Response = {
     val id = request.params.getInt("id").get
     val foundMap = rules.toSeq.map(p => {
@@ -182,6 +188,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
       case "stats/total" => stats(Respond(stats.totalTime))
       case "stats/avg" => stats(Respond(stats.avgTime))
       case "stats/long" => stats(Respond(stats.longStats))
+      case "stats/checkers" => stats(Respond(checkerDescriptions))
       case "stats" => stats(Respond(statsString))
       case "view" => futurePool(viewRule(request))
       case x => {
@@ -192,7 +199,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
   }
   abstract class ParsedRequest {
     val request: Request
-    val limit: Int
+    final val limit = 1
     val params = request.params
     val lang = params.get("lang") match {
       case None => "en"
@@ -216,7 +223,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
       case _ => None
     }
     def response: Response
-    lazy val matches: Seq[DatabaseRuleInfo] = {
+    lazy val matches: Option[DatabaseRuleInfo] = {
       cacheable match {
         case Some(value) if (userCache.contains(value)) => {
           stats.cacheHit()
@@ -224,9 +231,9 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
         }
         case _ => {
           val elapsed = com.twitter.util.Stopwatch.start()
-          val matches = combinations.view.flatMap((pair: (RuleSystem, Checkable)) => pair._1.allMatches(pair._2))
-          val result: Seq[DatabaseRuleInfo] = (if (limit > 0) matches.take(limit).force else matches.force).toSeq
-          result.headOption.map(sendToScribe(_))
+          val matches = combinations.view.flatMap((pair: (RuleSystem, Checkable)) => pair._1.firstMatch(pair._2))
+          val result = matches.take(1).headOption
+          result.map(sendToScribe(_))
           cacheable match {
             case Some(value) => userCache(cacheable.get) = result
             case _ => ()
@@ -250,7 +257,6 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
     }
   }
   case class CheckRequest(request: Request) extends ParsedRequest {
-    val limit = 1
     def response = {
       if (ruleSystems.isEmpty) Respond.unknownType else {
         if (content.isEmpty) 	Respond.contentMissing	else {
@@ -261,7 +267,6 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
     }
   }
   case class MatchRequest(request: Request) extends ParsedRequest {
-    val limit = request.params.getIntOrElse("limit", 1)
     def response = {
       if (ruleSystems.isEmpty) Respond.unknownType else {
         if (content.isEmpty) Respond.contentMissing	else {

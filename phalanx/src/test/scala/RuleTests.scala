@@ -11,7 +11,7 @@ class RuleTests extends FlatSpec {
 		intercept[RuleViolation] {
 			rule.check(Checkable("Something"))
 		}
-		assert(rule.allMatches(Checkable("Something")).toSet === Set(rule))
+		assert(rule.firstMatch(Checkable("Something")).toSet === Set(rule))
 	}
 
 	it should "match contains" in {
@@ -37,8 +37,8 @@ class RuleTests extends FlatSpec {
 		intercept[RuleViolation] {
 			rule.check(Checkable("Mary has a wolf"))
 		}
-		assert(rule.allMatches(Checkable("Mary has a lamb")).toSet === Set(Rule.contains("Mary")))
-		assert(rule.allMatches(Checkable("Something")).toSet === Set(Rule.exact("Something")))
+		assert(rule.firstMatch(Checkable("Mary has a lamb")).toSet === Set(Rule.contains("Mary")))
+		assert(rule.firstMatch(Checkable("Something")).toSet === Set(Rule.exact("Something")))
 
 		intercept[RuleViolation] {
 			rule.check(Checkable("lamb"))
@@ -51,14 +51,14 @@ class RuleTests extends FlatSpec {
 		intercept[RuleViolation] {
 			rule.check(Checkable("Szumo ma kota5", "en"))
 		}
-		assert(rule.allMatches(Checkable("Szumo ma kota5", "en")).toSet === Set(testRule))
+		assert(rule.firstMatch(Checkable("Szumo ma kota5", "en")).toSet === Set(testRule))
 		val newRs = rule.reloadRules(Seq(replacementRule), Seq.empty)
 		newRs.check(Checkable("Szumo ma kota5", "en"))
 		intercept[RuleViolation] {
 			newRs.check(Checkable("Szumo ma kota6", "en"))
 		}
-		assert(newRs.allMatches(Checkable("Szumo ma kota5", "en")).toSet === Set.empty)
-		assert(newRs.allMatches(Checkable("Szumo ma kota6", "en")).toSet === Set(replacementRule))
+		assert(newRs.firstMatch(Checkable("Szumo ma kota5", "en")).toSet === Set.empty)
+		assert(newRs.firstMatch(Checkable("Szumo ma kota6", "en")).toSet === Set(replacementRule))
 	}
 
 	"RuleSystem" should "work flat" in {

@@ -209,6 +209,9 @@ Show average matching time for cache misses since last full reload
 ### /stats/long
 Shows 10 longest requests since last full reload
 
+### /stats/checkers
+Show potentially slow rules of 'user' and 'content' types (id: text)
+
 ### /view
 Checks current information about a rule. Id must be passed with id parameter.
 Result will be JSON with rule information.
