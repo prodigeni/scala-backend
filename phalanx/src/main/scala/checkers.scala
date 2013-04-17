@@ -167,6 +167,10 @@ object Checker {
         case None => if (pattern.toSet[Char].subsetOf(digitsAndDot)) needsRealRegex = false // assume they meant real dot
       }
     }
+    InvalidRegex.checkForError(pattern) match {
+      case Some(s) => pattern = text // we broke something, revert
+      case _ => ()
+    }
     if (needsRealRegex) {
       //if (debug) logger.info("Making re2")
       Re2RegexChecker(caseType, pattern)
