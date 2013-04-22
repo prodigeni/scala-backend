@@ -13,7 +13,7 @@ package object phalanx {
 			case e: Throwable => if (n <= 0) Left(e) else tryNTimes(n - 1, block)
 		}
 	}
-	implicit class RichIterableGroup[A](val obj: Iterable[A]) extends AnyVal {
+	implicit class PhalanxIterable[A](val obj: Iterable[A]) extends AnyVal {
 		// adapted from TraversableLike.groupBy
 		def groupMap[K, R](f: A => (K, R)): Map[K, Iterable[R]] = {
 			val m = mutable.Map.empty[K, mutable.ListBuffer[R]]
@@ -32,6 +32,8 @@ package object phalanx {
 			}
 			counter.toMap
 		}
+    def minOrDefault(default: A)(implicit cmp: Ordering[A]): A = if (obj.isEmpty) default else obj.min
+    def maxOrDefault(default: A)(implicit cmp: Ordering[A]): A = if (obj.isEmpty) default else obj.max
 	}
 	implicit class HumanReadableByteCount(val bytes: Long) extends AnyVal {
 		def humanReadableByteCount: String = {

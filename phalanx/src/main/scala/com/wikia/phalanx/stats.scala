@@ -1,7 +1,8 @@
 package com.wikia.phalanx
 
-import com.twitter.util.{FuturePool, Duration, Future}
+import com.twitter.util.{FuturePool, Duration, Future, Time}
 import com.twitter.conversions.time._
+
 
 
 trait StatsGatherer {
@@ -40,59 +41,97 @@ class RealGatherer extends StatsGatherer {
 
 
   val keepLastMinutes = Config.keepLastMinutes()
+  val longRequestsMax = 10
   val breakline = "\n"+("-"*80) + "\n"
   val timeRanges = Seq(0.microseconds, 100.microseconds,
     1.millis, 3.millis, 10.millis, 30.millis, 100.millis, 300.millis,
     1.seconds, 3.seconds, 10.seconds, Duration.Top).toIndexedSeq
   private val pool = FuturePool(java.util.concurrent.Executors.newSingleThreadExecutor())
-  private var matchTime = 0.microsecond
-  private var matchCount = 0
-  private var cacheHits = 0
-  private val longRequests = collection.mutable.SortedSet.empty[LongRequest]
-  private var longRequestThreshold = 0.microsecond
-  private val longRequestsMax = 10
+  type TimeCounts = Array[Long]
 
-  def newTimeCounts() = collection.mutable.ArrayBuffer.fill(timeRanges.length)(0L)
-  var timeCounts = newTimeCounts()
+  class SubStats(val since:Time) {
+    def this() = this(Time.now)
+    val longRequests = collection.mutable.SortedSet.empty[LongRequest]
+    val counts:TimeCounts = Array.fill(timeRanges.length)(0L)
+    var matchCount = 0
+    var cacheHits = 0
+    var matchTime = 0.microsecond
+    var longRequestThreshold = 0.microsecond
+    override def toString =  (Seq(
+      s"Total time spent matching: $totalTime",
+      s"Average time spent matching: $avgTime",
+      s"Matches done: $matchCount",
+      s"User cache hits: $cacheHits",
+      s"Cache hit %: ${if (matchCount+cacheHits>0) cacheHits*100/(matchCount+cacheHits) else "unknown"}",
+      s"Longest request time: ${longRequests.lastOption.map(_.duration.niceString()).getOrElse("unknown")}"
+      ) ++ timeBreakDown).mkString("\n")
+    def timeBreakDown:Seq[String] = {
+      for ( (range, count) <- timeRanges.sliding(2).toSeq.zip(counts.toSeq) ) yield (
+        f"Requests ${range(0).niceString()}%16s to ${range(1).niceString()}%16s: $count%10d " + (if (matchCount>0) f"(${count*100/matchCount}%2d%)" else ""))
+    }
+    def longStats:String = longRequests.toSeq.reverse.map(_.toString).mkString(breakline)
+    def totalTime:String = matchTime.niceString()
+    def avgTime: String = matchCount match {
+      case 0 => "unknown"
+      case x => (matchTime / x).niceString()
+    }
 
+  }
+  def aggregate(subs: Iterable[SubStats]):Option[SubStats] = {
+    if (subs.isEmpty) None else {
+      def addCounts(a:Iterable[Long], b:Iterable[Long]):Iterable[Long] = a.zip(b).map(x => x._1 + x._2)
+      val result = new SubStats(subs.map(s => s.since).min)
+      result.matchCount = subs.map(s => s.matchCount).sum
+      result.cacheHits = subs.map(s => s.cacheHits).sum
+      val temp = subs.flatMap(s => s.longRequests)
+      result.longRequests ++= temp.drop(Seq(0, temp.size - longRequestsMax).max)
+      subs.map(s => s.counts.toIndexedSeq).reduce(addCounts).copyToArray(result.counts)
+      Some(result)
+    }
+  }
+
+  var full = new SubStats()
+  var last = collection.mutable.Map.empty[Int, SubStats]
 
   def apply[T](f: => T): Future[T] = pool.apply(f)
-  def storeRequest(time: Duration, request: => ParsedRequest) = pool {
-    matchTime += time
-    matchCount += 1
-    if (time >= longRequestThreshold || longRequests.size < longRequestsMax) {
-      longRequests += LongRequest(time, request)
-      if (longRequests.size > longRequestsMax) longRequests -= longRequests.head
-      longRequestThreshold = longRequests.head.duration
+  def dropOldTimes(time: Int) {
+    val dropOff = time - keepLastMinutes
+    last --= last.keys.filter(p => p<=dropOff)
+  }
+  def subStatsForTime(time: Int): SubStats = {
+    last.get(time) match {
+      case Some(substats) => substats
+      case None => {
+        dropOldTimes(time)
+        val substats = new SubStats()
+        last(time) = substats
+        substats
+      }
     }
+  }
+  def subStatsForTime: SubStats = subStatsForTime(Time.now.inMinutes)
+  def dropOldTimes() { dropOldTimes(Time.now.inMinutes) }
+  def subStats = Seq(full, subStatsForTime)
+  def storeRequest(time: Duration, request: => ParsedRequest) = pool {
     val index = timeRanges.indexWhere( d => time < d, 1)
-    if (index > 0) timeCounts(index-1) = timeCounts(index-1) + 1
+    for (substats <- Seq(full, subStatsForTime)) {
+      substats.matchTime += time
+      substats.matchCount += 1
+      if (index > 0) substats.counts(index-1) = substats.counts(index-1) + 1
+      if (time >= substats.longRequestThreshold || substats.longRequests.size < longRequestsMax) {
+        substats.longRequests += LongRequest(time, request)
+        if (substats.longRequests.size > longRequestsMax) substats.longRequests -= substats.longRequests.head
+        substats.longRequestThreshold = substats.longRequests.head.duration
+      }
+    }
   }
-  def cacheHit() = pool { cacheHits += 1 }
-  def reset() = pool {
-    matchTime = 0.microsecond
-    matchCount = 0
-    cacheHits = 0
-    longRequests.clear()
-    longRequestThreshold = 0.microsecond
-    timeCounts = newTimeCounts()
+  def cacheHit() = pool { subStats.foreach(s => s.cacheHits += 1)}
+  def reset() = pool {  full = new SubStats() }
+  def statsString: String = {
+    dropOldTimes()
+    (Seq(full) ++ aggregate(last.values)).map(s => s"Statistics since ${s.since}\n${s.toString}\n").mkString("\n")
   }
-  def statsString: String = (Seq(
-    s"Total time spent matching: $totalTime",
-    s"Average time spent matching: $avgTime",
-    s"Matches done: $matchCount",
-    s"User cache hits: $cacheHits",
-    s"Cache hit %: ${if (matchCount+cacheHits>0) cacheHits*100/(matchCount+cacheHits) else "unknown"}",
-    s"Longest request time: ${longRequests.lastOption.map(_.duration.niceString()).getOrElse("unknown")}"
-  ) ++ timeBreakDown).mkString("\n")
-  def timeBreakDown:Seq[String] = {
-    for ( (range, count) <- timeRanges.sliding(2).toSeq.zip(timeCounts.toSeq) ) yield (
-      f"Requests ${range(0).niceString()}%16s to ${range(1).niceString()}%16s: $count%10d " + (if (matchCount>0) f"(${count*100/matchCount}%2d%)" else ""))
-  }
-  def longStats:String = longRequests.toSeq.reverse.map(_.toString).mkString(breakline)
-  def totalTime:String = matchTime.niceString()
-  def avgTime: String = matchCount match {
-    case 0 => "unknown"
-    case x => (matchTime / x).niceString()
-  }
+  def longStats:String = full.longStats
+  def totalTime:String = full.totalTime
+  def avgTime: String = full.avgTime
 }

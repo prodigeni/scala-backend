@@ -72,6 +72,7 @@ object Config extends SysPropConfig {
   val detailedStats = Performance.bool(cwp+"detailedStats", "Keep detailed statistics", true)
   val newRelic = Performance.bool(cwp+"newRelic", "Enable NewRelic (only if NewRelic agent is loaded and environment set)", true)
   val keepLastMinutes = Performance.int(cwp+"keepStats", "Keep separate performance stats for last n minutes (if detailedStats)", 5)
+  val longRequestsMax = Performance.int(cwp+"longRequestsMax", "How many longest requests to remember", 10)
 
   val Network = Group("Network configuration")
   val port = Network.int(cwp+"port", "HTTP listening port", 4666)

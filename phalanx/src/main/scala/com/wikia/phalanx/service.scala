@@ -55,7 +55,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
   }
   val reloadPool = FuturePool(java.util.concurrent.Executors.newSingleThreadExecutor())
   watchExpired()
-  val favicon = Respond.fromResource("/shield.png", "image/png")
+  val favicon = Respond.fromResource("/shield.ico", "image/x-icon")
   abstract class BaseRequest extends ParsedRequest {
     val params = request.params
     val lang = params.get("lang") match {
@@ -220,8 +220,10 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
       s"Max memory: ${sys.runtime.maxMemory().humanReadableByteCount}",
       s"Free memory: ${sys.runtime.freeMemory().humanReadableByteCount}",
       s"Total memory: ${sys.runtime.totalMemory().humanReadableByteCount}",
+      s"User cache: ${userCache.size} (entries) / $userCacheMaxSize (size)",
+      s"Current server time: ${Time.now}",
+      "",
       stats.statsString,
-      s"User cache: ${userCache.size}/$userCacheMaxSize",
       "",
       checkerStats
     ).mkString("\n")
