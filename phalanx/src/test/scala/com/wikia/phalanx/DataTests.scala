@@ -1,7 +1,6 @@
-package com.wikia.phalanx.tests
+package com.wikia.phalanx
 
 import au.com.bytecode.opencsv.CSVReader
-import com.wikia.phalanx._
 import org.scalatest._
 import com.twitter.util.Time
 

@@ -1,6 +1,5 @@
-package com.wikia.phalanx.tests
+package com.wikia.phalanx
 
-import com.wikia.phalanx._
 import org.scalatest._
 
 class RuleTests extends FlatSpec {

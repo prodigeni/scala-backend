@@ -1,11 +1,10 @@
-package com.wikia.phalanx.tests
+package com.wikia.phalanx
 
 import com.twitter.conversions.time._
 import com.twitter.finagle.Service
 import com.twitter.finagle.builder.{ServerBuilder, ClientBuilder}
 import com.twitter.finagle.http._
 import com.twitter.util.{Future, Time, TimeControl}
-import com.wikia.phalanx._
 import java.net.InetSocketAddress
 import java.nio.charset.Charset
 import org.jboss.netty.handler.codec.http.{HttpRequest, HttpResponse}

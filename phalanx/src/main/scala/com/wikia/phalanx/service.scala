@@ -6,8 +6,16 @@ import com.twitter.conversions.time._
 import com.twitter.finagle.Service
 import com.twitter.finagle.builder.ClientBuilder
 import com.twitter.finagle.http.{Http, Response, Request}
-import com.twitter.util.{Time, TimerTask, SynchronizedLruMap, Future, FuturePool, Duration}
+import com.twitter.util.{Time, TimerTask, SynchronizedLruMap, Future, FuturePool}
 import java.util.NoSuchElementException
+
+trait ParsedRequest {
+  def request: Request
+  def response: Response
+  def content:Iterable[Checkable]
+  def checkTypes:Iterable[String]
+  def matches: Option[DatabaseRuleInfo]
+}
 
 
 class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => Map[String, RuleSystem],
@@ -17,7 +25,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
   var nextExpireDate: Option[Time] = None
   var expireWatchTask: Option[TimerTask] = None
   val userCacheMaxSize = Config.userCacheMaxSize()
-  val stats:StatsGatherer = if (Config.detailedStats()) new RealGatherer() else new NullGatherer()
+  val stats:StatsGatherer = if (Config.detailedStats()) new RealGatherer() else NullGatherer
   val userCache:collection.mutable.Map[String, Option[DatabaseRuleInfo]] = new SynchronizedLruMap[String, Option[DatabaseRuleInfo]](userCacheMaxSize)
   val notifyMap = {
     val localhost = java.net.InetAddress.getLocalHost.getHostName
@@ -47,6 +55,83 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
   }
   val reloadPool = FuturePool(java.util.concurrent.Executors.newSingleThreadExecutor())
   watchExpired()
+  val favicon = Respond.fromResource("/shield.png", "image/png")
+  abstract class BaseRequest extends ParsedRequest {
+    val params = request.params
+    val lang = params.get("lang") match {
+      case None => "en"
+      case Some("") => "en"
+      case Some(x) => x
+    }
+    val content = params.getAll("content").map(s => Checkable(s, lang))
+    val user = params.get("user")
+    val wiki = params.get("wiki").map(_.toInt)
+    val checkTypes = params.getAll("type")
+    val ruleSystems: Iterable[RuleSystem] = if (checkTypes.isEmpty) rules.values else {
+      try {
+        checkTypes.map(s => rules(s)).toSet
+      } catch {
+        case _: NoSuchElementException => Set.empty
+      }
+    }
+    val combinations: Iterable[(RuleSystem, Checkable)] = (for (r <- ruleSystems;c <- content) yield (r, c))
+    val cacheable:Option[String] = checkTypes match {
+      case "user" :: Nil => Some(params.getAll("content").mkString("|"))
+      case _ => None
+    }
+    lazy val matches: Option[DatabaseRuleInfo] = {
+      cacheable match {
+        case Some(value) if (userCache.contains(value)) => {
+          stats.cacheHit()
+          userCache(value)
+        }
+        case _ => {
+          val elapsed = com.twitter.util.Stopwatch.start()
+          val matches = combinations.view.flatMap((pair: (RuleSystem, Checkable)) => pair._1.firstMatch(pair._2))
+          val result = matches.take(1).headOption
+          result.map(sendToScribe(_))
+          cacheable match {
+            case Some(value) => userCache(cacheable.get) = result
+            case _ => ()
+          }
+          stats.storeRequest(elapsed(), this)
+          result
+        }
+      }
+    }
+    def sendToScribe(rule: DatabaseRuleInfo): Future[Unit] = {
+      if (user.isDefined && wiki.isDefined) {
+        scribe(Map(
+          "blockId" → rule.dbId,
+          "blockType" → rule.typeMask,
+          "blockTs" → com.wikia.wikifactory.DB.wikiCurrentTime,
+          "blockUser" → user.get,
+          "city_id" → wiki.get
+        ))
+      }
+      else Future.Done
+    }
+  }
+  case class CheckRequest(request: Request) extends BaseRequest {
+    def response = {
+      if (ruleSystems.isEmpty) Respond.unknownType else {
+        if (content.isEmpty) 	Respond.contentMissing	else {
+          logger.trace(s"check: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
+          if (matches.isEmpty) Respond.ok else Respond.failure
+        }
+      }
+    }
+  }
+  case class MatchRequest(request: Request) extends BaseRequest {
+    def response = {
+      if (ruleSystems.isEmpty) Respond.unknownType else {
+        if (content.isEmpty) Respond.contentMissing	else {
+          logger.trace(s"match: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
+          Respond.json(matches)
+        }
+      }
+    }
+  }
 
   override def close(deadline: Time) = {
     logger.trace("Stopping expired timer")
@@ -135,7 +220,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
       s"Max memory: ${sys.runtime.maxMemory().humanReadableByteCount}",
       s"Free memory: ${sys.runtime.freeMemory().humanReadableByteCount}",
       s"Total memory: ${sys.runtime.totalMemory().humanReadableByteCount}",
-      stats.toString,
+      stats.statsString,
       s"User cache: ${userCache.size}/$userCacheMaxSize",
       "",
       checkerStats
@@ -191,168 +276,13 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
       case "stats/checkers" => stats(Respond(checkerDescriptions))
       case "stats" => stats(Respond(statsString))
       case "view" => futurePool(viewRule(request))
+      case "favicon.ico" => Future.value(favicon)
       case x => {
         logger.warn("Unknown request path: " + request.path + " [ " + x.toString + " ] ")
         Future(Respond.notFound)
       }
     }
   }
-  abstract class ParsedRequest {
-    val request: Request
-    final val limit = 1
-    val params = request.params
-    val lang = params.get("lang") match {
-      case None => "en"
-      case Some("") => "en"
-      case Some(x) => x
-    }
-    val content = params.getAll("content").map(s => Checkable(s, lang))
-    val user = params.get("user")
-    val wiki = params.get("wiki").map(_.toInt)
-    val checkTypes = params.getAll("type")
-    val ruleSystems: Iterable[RuleSystem] = if (checkTypes.isEmpty) rules.values else {
-      try {
-        checkTypes.map(s => rules(s)).toSet
-      } catch {
-        case _: NoSuchElementException => Set.empty
-      }
-    }
-    val combinations: Iterable[(RuleSystem, Checkable)] = (for (r <- ruleSystems;c <- content) yield (r, c))
-    val cacheable:Option[String] = checkTypes match {
-      case "user" :: Nil => Some(params.getAll("content").mkString("|"))
-      case _ => None
-    }
-    def response: Response
-    lazy val matches: Option[DatabaseRuleInfo] = {
-      cacheable match {
-        case Some(value) if (userCache.contains(value)) => {
-          stats.cacheHit()
-          userCache(value)
-        }
-        case _ => {
-          val elapsed = com.twitter.util.Stopwatch.start()
-          val matches = combinations.view.flatMap((pair: (RuleSystem, Checkable)) => pair._1.firstMatch(pair._2))
-          val result = matches.take(1).headOption
-          result.map(sendToScribe(_))
-          cacheable match {
-            case Some(value) => userCache(cacheable.get) = result
-            case _ => ()
-          }
-          stats.storeRequest(elapsed(), this)
-          result
-        }
-      }
-    }
-    def sendToScribe(rule: DatabaseRuleInfo): Future[Unit] = {
-      if (user.isDefined && wiki.isDefined) {
-        scribe(Map(
-          "blockId" → rule.dbId,
-          "blockType" → rule.typeMask,
-          "blockTs" → com.wikia.wikifactory.DB.wikiCurrentTime,
-          "blockUser" → user.get,
-          "city_id" → wiki.get
-        ))
-      }
-      else Future.Done
-    }
-  }
-  case class CheckRequest(request: Request) extends ParsedRequest {
-    def response = {
-      if (ruleSystems.isEmpty) Respond.unknownType else {
-        if (content.isEmpty) 	Respond.contentMissing	else {
-          logger.trace(s"check: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
-          if (matches.isEmpty) Respond.ok else Respond.failure
-        }
-      }
-    }
-  }
-  case class MatchRequest(request: Request) extends ParsedRequest {
-    def response = {
-      if (ruleSystems.isEmpty) Respond.unknownType else {
-        if (content.isEmpty) Respond.contentMissing	else {
-          logger.trace(s"match: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
-          Respond.json(matches)
-        }
-      }
-    }
-  }
-  trait StatsGatherer {
-    def apply[T](f: => T): Future[T]
-    def reset(): Future[Unit] = Future.Done
-    def cacheHit(): Future[Unit] = Future.Done
-    def storeRequest(time: Duration, request: => ParsedRequest): Future[Unit] = Future.Done
-    def totalTime:String = "unknown"
-    def avgTime:String = "unknown"
-    def statsString:String = ""
-    def longStats:String = ""
-  }
-  class RealGatherer extends StatsGatherer {
-    case class LongRequest(duration:Duration, pr: ParsedRequest) {
-      override def toString:String = Seq(
-        s"$duration ${pr.request.remoteHost} ${pr.request.path} ${pr.checkTypes.mkString(",")} ",
-        s"[${pr.content.map(_.text.length).sum} chars] Referer: ${pr.request.headers.getOrElse("Referer","")} ",
-        s"Matches: ${pr.matches.mkString(",")}"
-      ).mkString
-    }
-    implicit object LongRequestOrdering extends Ordering[LongRequest] {
-      def compare(a:LongRequest, b:LongRequest) = a.duration compare b.duration
-    }
-    val keepLastMinutes = Config.keepLastMinutes()
-    val timeRanges = Seq(0.microseconds, 100.microseconds,
-      1.millis, 3.millis, 10.millis, 30.millis, 100.millis, 300.millis,
-      1.seconds, 3.seconds, 10.seconds, Duration.Top).toIndexedSeq
-    def newTimeCounts() = collection.mutable.ArrayBuffer.fill(timeRanges.length)(0L)
-    var timeCounts = newTimeCounts()
-    val pool = FuturePool(java.util.concurrent.Executors.newSingleThreadExecutor())
-    def apply[T](f: => T): Future[T] = pool.apply(f)
-    private var matchTime = 0.microsecond
-    private var matchCount = 0
-    private var cacheHits = 0
-    private val longRequests = collection.mutable.SortedSet.empty[LongRequest]
-    private var longRequestThreshold = 0.microsecond
-    private val longRequestsMax = 10
 
-    override def storeRequest(time: Duration, request: => ParsedRequest) = pool {
-      matchTime += time
-      matchCount += 1
-      if (time >= longRequestThreshold || longRequests.size < longRequestsMax) {
-        longRequests += LongRequest(time, request)
-        if (longRequests.size > longRequestsMax) longRequests -= longRequests.head
-        longRequestThreshold = longRequests.head.duration
-      }
-      val index = timeRanges.indexWhere( d => time < d, 1)
-      if (index > 0) timeCounts(index-1) = timeCounts(index-1) + 1
-    }
-    override def cacheHit() = pool { cacheHits += 1 }
-    override def reset() = pool {
-      matchTime = 0.microsecond
-      matchCount = 0
-      cacheHits = 0
-      longRequests.clear()
-      longRequestThreshold = 0.microsecond
-      timeCounts = newTimeCounts()
-    }
-    override def toString: String = (Seq(
-      s"Total time spent matching: $totalTime",
-      s"Average time spent matching: $avgTime",
-      s"Matches done: $matchCount",
-      s"User cache hits: $cacheHits",
-      s"Cache hit %: ${if (matchCount+cacheHits>0) cacheHits*100/(matchCount+cacheHits) else "unknown"}",
-      s"Longest request time: ${longRequests.lastOption.map(_.duration.niceString()).getOrElse("unknown")}"
-    ) ++ timeBreakDown).mkString("\n")
-    def timeBreakDown:Seq[String] = {
-      for ( (range, count) <- timeRanges.sliding(2).toSeq.zip(timeCounts.toSeq) ) yield (
-        f"Requests ${range(0).niceString()}%16s to ${range(1).niceString()}%16s: $count%10d " + (if (matchCount>0) f"(${count*100/matchCount}%2d%)" else ""))
-    }
-    val breakline = "\n"+("-"*80) + "\n"
-    override def longStats:String = longRequests.toSeq.reverse.map(_.toString).mkString(breakline)
-    override def totalTime:String = matchTime.niceString()
-    override def avgTime: String = matchCount match {
-      case 0 => "unknown"
-      case x => (matchTime / x).niceString()
-    }
-  }
-  class NullGatherer extends StatsGatherer {
-    def apply[T](f: => T): Future[T] = Future.value(f)
-  }
+
 }

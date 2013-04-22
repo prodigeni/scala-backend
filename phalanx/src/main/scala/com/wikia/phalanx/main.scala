@@ -41,6 +41,17 @@ object Respond {
 		val jsonData = JSONObject(data.mapValues(x => x.toJSONObject))
 		Respond(jsonData.toString(JSONFormat.defaultFormatter), Status.Ok, Message.ContentTypeJson)
 	}
+  def fromResource(path: String, contentType: String) = {
+    val stream = getClass.getResourceAsStream(path)
+    assert(stream != null, s"Could not find resource $path")
+    val bytes = Array.ofDim[Byte](stream.available)
+    stream.read(bytes)
+    stream.close()
+    val response = Response(com.twitter.finagle.http.Version.Http11, org.jboss.netty.handler.codec.http.HttpResponseStatus.OK)
+    response.contentType = contentType
+    response.content = org.jboss.netty.buffer.ChannelBuffers.wrappedBuffer(bytes)
+    response
+  }
 	def error(info: String, status: HttpResponseStatus = Status.InternalServerError) = Respond(info + "\n", status)
 	val ok = Respond("ok\n")
 	val failure = Respond("failure\n")
@@ -127,15 +138,15 @@ object Main extends App {
 		})
 	}
 	cfName match {
-		case Some(fileName) => sys.props ++= loadProperties(fileName).toMap
-		case None => {
-			println("Don't know where to load configuration from.")
-			System.exit(2)
-		}
+		case Some(fileName) => {
+      sys.props ++= loadProperties(fileName).toMap
+      println(s"Loaded configuration from $fileName}")
+    }
+		case None => println("No configuration file specified, using defaults.")
 	}
 	val logger = NiceLogger("Main")
-	val versionString = s"Phalanx server version ${PhalanxVersion.version}"
-	logger.info(s"$versionString starting, properties loaded from ${cfName.get}")
+  val versionString = s"Phalanx server version ${PhalanxVersion.version}"
+	logger.info(versionString+ " starting")
 	val preloaded = PackagePreloader(this.getClass, Seq(
 		"com.wikia.phalanx",
 		"com.twitter.finagle.http",
