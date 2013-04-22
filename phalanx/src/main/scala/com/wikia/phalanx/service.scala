@@ -297,9 +297,10 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
     implicit object LongRequestOrdering extends Ordering[LongRequest] {
       def compare(a:LongRequest, b:LongRequest) = a.duration compare b.duration
     }
+    val keepLastMinutes = Config.keepLastMinutes()
     val timeRanges = Seq(0.microseconds, 100.microseconds,
       1.millis, 3.millis, 10.millis, 30.millis, 100.millis, 300.millis,
-      1.seconds, 3.seconds, 10.seconds, 30.seconds, 1.minute, Duration.Top).toIndexedSeq
+      1.seconds, 3.seconds, 10.seconds, Duration.Top).toIndexedSeq
     def newTimeCounts() = collection.mutable.ArrayBuffer.fill(timeRanges.length)(0L)
     var timeCounts = newTimeCounts()
     val pool = FuturePool(java.util.concurrent.Executors.newSingleThreadExecutor())

@@ -60,7 +60,7 @@ object Config extends SysPropConfig {
   val workerGroups = Performance.int(cwp+"workerGroups", "Split each matching work into n parallel groups, or 0 for auto value", 0)
   val detailedStats = Performance.bool(cwp+"detailedStats", "Keep detailed statistics", true)
   val newRelic = Performance.bool(cwp+"newRelic", "Enable NewRelic (only if NewRelic agent is loaded and environment set)", true)
-
+  val keepLastMinutes = Performance.int(cwp+"keepStats", "Keep separate performance stats for last n minutes (if detailedStats)", 5)
 
   val Network = Group("Network configuration")
   val port = Network.int(cwp+"port", "HTTP listening port", 4666)
