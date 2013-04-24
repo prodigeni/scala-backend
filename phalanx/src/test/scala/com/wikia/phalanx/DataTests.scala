@@ -1,8 +1,8 @@
 package com.wikia.phalanx
 
 import au.com.bytecode.opencsv.CSVReader
-import org.scalatest._
 import com.twitter.util.Time
+import org.scalatest._
 
 class CSVFile(fileName: String, charset: String = "UTF-8", separator: Char = ',', quote: Char = '"', escape: Char = '\0') extends Traversable[Array[String]] {
 	override def foreach[U](f: Array[String] => U) {
@@ -44,7 +44,8 @@ class DataTests extends FlatSpec {
 		checkSystem(rs)
 	}
 	it should "also work Combined" in {
-		checkSystem(rs.combineRules)
+    val combined = rs.combineRules
+		checkSystem(combined)
 	}
 }
 

@@ -6,7 +6,7 @@ name := "phalanx"
 
 organization := "com.wikia"
 
-version := "0.22"
+version := "0.23"
 
 version ~= { (s) => {
   import scala.sys.process._
@@ -38,7 +38,7 @@ publishTo <<= (version) { version: String =>
 
 libraryDependencies ++= Seq(
   "com.logentries.re2" % "libre2-java" % "1.0",
-  "net.szumo" %% "fstl-oc" % "0.3",
+  "net.szumo" %% "fstl-oc" % "0.5",
   "com.wikia" %% "utils" % "0.2",
   "com.wikia" %% "wikifactory" % "0.13",
   "com.typesafe.slick" %% "slick" % "1.0.0",

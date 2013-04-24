@@ -47,7 +47,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
   val timer = com.twitter.finagle.util.DefaultTimer.twitter
   @transient var rules = reloader(Map.empty, Seq.empty)
   val threadPoolSize:Int = Config.serviceThreadCount() match {
-    case 0 => Seq(1, Main.processors/2).max
+    case 0 => Seq(1, Main.processors).max
     case x => x
   }
   val futurePool = if (threadPoolSize <= 0) {FuturePool.immediatePool} else {
@@ -221,7 +221,6 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
       s"Free memory: ${sys.runtime.freeMemory().humanReadableByteCount}",
       s"Total memory: ${sys.runtime.totalMemory().humanReadableByteCount}",
       s"User cache: ${userCache.size} (entries) / $userCacheMaxSize (size)",
-      s"Current server time: ${Time.now}",
       "",
       stats.statsString,
       "",

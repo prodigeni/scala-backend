@@ -68,7 +68,7 @@ object Config extends SysPropConfig {
   val Performance = Group("Performance tuning")
   val userCacheMaxSize = Performance.int(cwp+"userCacheMaxSize", "Size of LRU cache for user matching", (2 << 16)-1)
   val serviceThreadCount = Performance.int(cwp+"serviceThreadCount", "Number of main service threads, or 0 for auto value", 0)
-  val workerGroups = Performance.int(cwp+"workerGroups", "Split each matching work into n parallel groups, or 0 for auto value", 0)
+  val workerGroups = Performance.int(cwp+"workerGroups", "Split each matching work into n parallel groups, or 0 for default", 0)
   val detailedStats = Performance.bool(cwp+"detailedStats", "Keep detailed statistics", true)
   val newRelic = Performance.bool(cwp+"newRelic", "Enable NewRelic (only if NewRelic agent is loaded and environment set)", true)
   val keepLastMinutes = Performance.int(cwp+"keepStats", "Keep separate performance stats for last n minutes (if detailedStats)", 5)
@@ -104,6 +104,9 @@ object Config extends SysPropConfig {
 
 
 object Main extends App {
+  val versionString = s"Phalanx server version ${PhalanxVersion.version}"
+
+
   if (args.contains("--print-defaults")) {
     println(Config.defaultConfigContents)
     sys.exit(0)
@@ -121,9 +124,7 @@ object Main extends App {
 		println("Loaded properties from " + fileName)
 		properties
 	}
-	def scribeClient() = {
-		new ScribeClient("log_phalanx", Config.scribeHost(), Config.scribePort())
-	}
+	def scribeClient() = new ScribeClient("log_phalanx", Config.scribeHost(), Config.scribePort())
 
 	val cfName: Option[String] = sys.props.get("phalanx.config") orElse {
 		// load config from first config file that exists
@@ -139,19 +140,21 @@ object Main extends App {
 		})
 	}
 	cfName match {
-		case Some(fileName) => {
-      sys.props ++= loadProperties(fileName).toMap
-      println(s"Loaded configuration from $fileName}")
-    }
-		case None => println("No configuration file specified, using defaults.")
+		case Some(fileName) => sys.props ++= loadProperties(fileName).toMap
+		case None => ()
 	}
 	val logger = NiceLogger("Main")
-  val versionString = s"Phalanx server version ${PhalanxVersion.version}"
-	logger.info(versionString+ " starting")
+  logger.info(versionString+ " starting")
+  logger.info(cfName match {
+    case Some(fileName) => s"Loaded configuration from $fileName}"
+    case None => "No configuration file specified, using defaults."
+  })
+
 	val preloaded = PackagePreloader(this.getClass, Seq(
 		"com.wikia.phalanx",
 		"com.twitter.finagle.http",
-		"com.twitter.util"
+		"com.twitter.util",
+    "net.szumo.fstl"
 	))
 	logger.info("Preloaded " + preloaded.size + " classes")
 

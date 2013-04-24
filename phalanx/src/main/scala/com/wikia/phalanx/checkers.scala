@@ -48,7 +48,7 @@ case class Re2RegexChecker(caseType: CaseType, text: String) extends Checker {
 
 class Re2RegexMultiChecker(val caseType: CaseType, alternatives: Map[String, DatabaseRule]) extends MultiChecker {
   import com.logentries.re2.{RE2, Options}
-  def baseOptions = new Options().setMaxMem(128*1024*1024).setNeverCapture(true).setLogErrors(false)
+  def baseOptions = new Options().setMaxMem(128*1024*1024).setNeverCapture(true).setLogErrors(true)
   private final val flags = Map(
     CaseSensitive -> baseOptions.setCaseSensitive(true),
     CaseInsensitive -> baseOptions.setCaseSensitive(false)
@@ -123,9 +123,9 @@ object InvalidRegex {
 
 object Checker {
   import net.szumo.fstl.StringMatcher
-  final val logger = NiceLogger("Checker")
-  final val TYPE_USER = 8
-  var groupCount = Config.workerGroups() match {
+  val logger = NiceLogger("Checker")
+  val TYPE_USER = 8
+  val groupCount = Config.workerGroups() match {
     case 0 => Seq(1, Main.processors/2).max
     case x => x
   }
@@ -172,10 +172,8 @@ object Checker {
       case _ => ()
     }
     if (needsRealRegex) {
-      //if (debug) logger.info("Making re2")
       Re2RegexChecker(caseType, pattern)
     } else {
-      //if (debug) logger.info("Making contains")
       ContainsChecker(caseType, pattern)
     }
   }

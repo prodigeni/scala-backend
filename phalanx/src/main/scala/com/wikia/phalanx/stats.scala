@@ -49,14 +49,10 @@ class RealGatherer extends StatsGatherer {
   private val pool = FuturePool(java.util.concurrent.Executors.newSingleThreadExecutor())
   type TimeCounts = Array[Long]
 
-  class SubStats(val since:Time) {
-    def this() = this(Time.now)
-    val longRequests = collection.mutable.SortedSet.empty[LongRequest]
-    val counts:TimeCounts = Array.fill(timeRanges.length)(0L)
-    var matchCount = 0
-    var cacheHits = 0
-    var matchTime = 0.microsecond
-    var longRequestThreshold = 0.microsecond
+  class SubStats(val since:Time, var matchCount: Int, var cacheHits: Int, var matchTime:Duration, var longRequestThreshold:Duration,
+                 val longRequests:collection.mutable.SortedSet[LongRequest], val counts: TimeCounts ) {
+    def this() = this(Time.now, 0, 0, 0.microsecond, 0.microsecond,
+      collection.mutable.SortedSet.empty[LongRequest], Array.fill(timeRanges.length)(0L))
     override def toString =  (Seq(
       s"Total time spent matching: $totalTime",
       s"Average time spent matching: $avgTime",
@@ -80,12 +76,17 @@ class RealGatherer extends StatsGatherer {
   def aggregate(subs: Iterable[SubStats]):Option[SubStats] = {
     if (subs.isEmpty) None else {
       def addCounts(a:Iterable[Long], b:Iterable[Long]):Iterable[Long] = a.zip(b).map(x => x._1 + x._2)
-      val result = new SubStats(subs.map(s => s.since).min)
-      result.matchCount = subs.map(s => s.matchCount).sum
-      result.cacheHits = subs.map(s => s.cacheHits).sum
       val temp = subs.flatMap(s => s.longRequests)
-      result.longRequests ++= temp.drop(Seq(0, temp.size - longRequestsMax).max)
-      subs.map(s => s.counts.toIndexedSeq).reduce(addCounts).copyToArray(result.counts)
+      val longRequests = collection.mutable.SortedSet.empty[LongRequest]
+      longRequests ++= temp.drop(Seq(0, temp.size - longRequestsMax).max)
+      val result = new SubStats(
+        subs.map(s => s.since).min,
+        subs.map(s => s.matchCount).sum,
+        subs.map(s => s.cacheHits).sum,
+        Duration.fromNanoseconds(subs.map(s => s.matchTime.inNanoseconds).sum),
+        subs.map(s => s.longRequestThreshold).min,
+        longRequests,
+        subs.map(s => s.counts.toIndexedSeq).reduce(addCounts).toArray)
       Some(result)
     }
   }
@@ -129,7 +130,8 @@ class RealGatherer extends StatsGatherer {
   def reset() = pool {  full = new SubStats() }
   def statsString: String = {
     dropOldTimes()
-    (Seq(full) ++ aggregate(last.values)).map(s => s"Statistics since ${s.since}\n${s.toString}\n").mkString("\n")
+    val now = Time.now.toString()
+    (Seq(full) ++ aggregate(last.values)).map(s => s"Statistics from ${s.since} to $now\n${s.toString}\n").mkString("\n")
   }
   def longStats:String = full.longStats
   def totalTime:String = full.totalTime
