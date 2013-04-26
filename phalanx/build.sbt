@@ -38,7 +38,8 @@ publishTo <<= (version) { version: String =>
 
 libraryDependencies ++= Seq(
   "com.logentries.re2" % "libre2-java" % "1.0",
-  "net.szumo" %% "fstl-oc" % "0.5",
+  "net.szumo" %% "fstl-common" % "0.6",
+  "net.szumo" %% "fstl-ac" % "0.6",
   "com.wikia" %% "utils" % "0.2",
   "com.wikia" %% "wikifactory" % "0.13",
   "com.typesafe.slick" %% "slick" % "1.0.0",
@@ -47,7 +48,7 @@ libraryDependencies ++= Seq(
   "org.scalatest" % "scalatest_2.10" % "1.9.1" % "test",
   "net.sf.opencsv" % "opencsv" % "2.0" % "test",
   "org.slf4j" % "slf4j-simple" % "1.7.2",
-  "newrelic.java-agent" % "newrelic-api" % "2.7.0"
+  "newrelic.java-agent" % "newrelic-api" % "2.17.2"
 )
 
 scalacOptions ++= Seq("-deprecation", "-unchecked")

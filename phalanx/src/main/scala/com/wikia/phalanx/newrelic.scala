@@ -8,14 +8,15 @@ import com.twitter.finagle.http.{Request, Response}
 import com.twitter.finagle.{Service, SimpleFilter}
 import com.twitter.util.Duration
 import org.slf4j.LoggerFactory
+import collection.convert.WrapAsJava
 
-case class NewRelicReq(name:String) extends agent.Request {
+case class NewRelicReq(name:String, req:Request) extends agent.Request {
 	val empty = collection.JavaConversions.asJavaEnumeration(Seq.empty[String].toIterator)
 	def getRequestURI = name
-	def getHeader(name: String) = null
+	def getHeader(name: String) = req.headers.getOrElse(name, null)
 	def getRemoteUser = null
-	def getParameterNames = empty
-	def getParameterValues(name: String) = Array.empty[String]
+	def getParameterNames = WrapAsJava.asJavaEnumeration(req.params.keys.toIterator)
+	def getParameterValues(name: String) = req.params.getAll(name).toArray
 	def getAttribute(name: String) = null
 }
 sealed abstract class NewRelicResponse extends agent.Response {
@@ -38,7 +39,7 @@ abstract class NewRelicHttpFilter extends SimpleFilter[Request, Response] {
 	def apply(request: Request, service: Service[Request, Response]) = {
     val elapsed = com.twitter.util.Stopwatch.start()
 		val name = classifier(request)
-		val nReq = NewRelicReq(name)
+		val nReq = NewRelicReq(name, request)
 		val future = service(request)
 		future.onSuccess { response =>
 			val duration = elapsed()
@@ -51,13 +52,13 @@ abstract class NewRelicHttpFilter extends SimpleFilter[Request, Response] {
 			reportErr(nReq, duration, e)
 		}
 	}
-	@agent.Trace(dispatcher=false)
+	@agent.Trace(dispatcher=true)
 	def reportOk(req:NewRelicReq, duration:Duration, resp: NewRelicResponse) {
 		agent.NewRelic.setTransactionName(null, req.name)
 		agent.NewRelic.setRequestAndResponse(req, resp)
 		agent.NewRelic.recordResponseTimeMetric(req.name, duration.inMillis)
 	}
-	@agent.Trace(dispatcher=false)
+	@agent.Trace(dispatcher=true)
 	def reportErr(req:NewRelicReq, duration:Duration, e:Throwable) {
 		agent.NewRelic.setTransactionName(null, req.name)
 		agent.NewRelic.setRequestAndResponse(req, NewRelicError(e))

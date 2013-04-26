@@ -78,7 +78,7 @@ case class SetExactChecker(caseType: CaseType, origTexts: Map[String, DatabaseRu
 }
 
 case class FSTLChecker(caseType: CaseType, origTexts: Map[String, DatabaseRule]) extends MultiChecker {
-  import net.szumo.fstl.StringMatcher
+  import net.szumo.fstl.ac.StringMatcher
   val texts:Map[String, DatabaseRule] = if (caseType == CaseSensitive) origTexts else origTexts.map(t => t.copy(_1 = t._1.toLowerCase))
   val matcher = StringMatcher(texts.keys, StringMatcher.CaseSensitive, texts.apply _) // we use our own case handling instead
   def isMatch(s: Checkable): Boolean = matcher.isMatch(caseType(s))
@@ -122,7 +122,7 @@ object InvalidRegex {
 }
 
 object Checker {
-  import net.szumo.fstl.StringMatcher
+  import net.szumo.fstl.ac.StringMatcher
   val logger = NiceLogger("Checker")
   val TYPE_USER = 8
   val groupCount = Config.workerGroups() match {
