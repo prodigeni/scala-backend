@@ -146,7 +146,7 @@ object Main extends App {
 	val logger = NiceLogger("Main")
   logger.info(versionString+ " starting")
   logger.info(cfName match {
-    case Some(fileName) => s"Loaded configuration from $fileName}"
+    case Some(fileName) => s"Loaded configuration from $fileName"
     case None => "No configuration file specified, using defaults."
   })
 
