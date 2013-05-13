@@ -80,7 +80,7 @@ case class SetExactChecker(caseType: CaseType, origTexts: Map[String, DatabaseRu
 case class FSTLChecker(caseType: CaseType, origTexts: Map[String, DatabaseRule]) extends MultiChecker {
   import net.szumo.fstl.ac.StringMatcher
   val texts:Map[String, DatabaseRule] = if (caseType == CaseSensitive) origTexts else origTexts.map(t => t.copy(_1 = t._1.toLowerCase))
-  val matcher = StringMatcher(texts.keys, StringMatcher.CaseSensitive, texts.apply _) // we use our own case handling instead
+  val matcher = StringMatcher(texts.keys, net.szumo.fstl.CaseSensitive, texts.apply _) // we use our own case handling instead
   def isMatch(s: Checkable): Boolean = matcher.isMatch(caseType(s))
   def firstMatch(s: Checkable): Option[DatabaseRule] = {
     val matches = matcher(caseType(s))
@@ -135,7 +135,7 @@ object Checker {
   val regexMeaninglessSuffixes = Seq(".*$", ".", ".*", ".+")
   val heurestics = Seq("https?://+[a-z0-9_./-]")
   val digitsAndDot = Set('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '.')
-  val regexSpecialMatcher = StringMatcher(regexSpecialChars, StringMatcher.CaseSensitive)
+  val regexSpecialMatcher = StringMatcher(regexSpecialChars, net.szumo.fstl.CaseSensitive)
   def unquoteRegex(pattern:String) = regexSpecialCharsAndSome.foldLeft(pattern)( (p:String, s:String) => p.replace("\\"+s,s))
   def removeQuoted(pattern:String) = regexSpecialCharsAndSome.foldLeft(pattern)( (p:String, s:String) => p.replace("\\"+s,""))
 
