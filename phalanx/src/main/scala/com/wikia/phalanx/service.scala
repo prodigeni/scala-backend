@@ -30,6 +30,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
   val notifyMap = {
     val localhost = java.net.InetAddress.getLocalHost.getHostName
     logger.debug(s"Local hostname: $localhost")
+    logger.debug(s"Notify nodes: $notifyNodes")
     notifyNodes.filterNot(_.startsWith(localhost)).map( node => {
       val parts = node.split(":")
       val hostname = parts.head
