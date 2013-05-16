@@ -148,7 +148,8 @@ class CombinedRuleSystem(initialRules: Iterable[DatabaseRule]) extends FlatRuleS
 		val groupedByLang = initialRules.groupBy(rule => rule.language)
     val defaults = groupedByLang.get(None).map(_.toSeq).getOrElse(Seq.empty)
 		val result = for ((lang, rs) <- groupedByLang if lang.nonEmpty) yield (lang.get, autoParallel(Checker.combine(defaults ++ rs).toSeq))
-		result.toMap.withDefaultValue(autoParallel(Checker.combine(defaults).toSeq))
+    val allLang = autoParallel(Checker.combine(defaults).toSeq)
+		result.toMap.updated("", allLang).withDefaultValue(allLang) // for stats
 	}
 	override def copy(rules: Iterable[DatabaseRule]) = new CombinedRuleSystem(rules)
 	override def firstMatch(s: Checkable): Option[DatabaseRule] = checkers(s.language).flatMap(c => c.firstMatch(s)).headOption
@@ -157,7 +158,7 @@ class CombinedRuleSystem(initialRules: Iterable[DatabaseRule]) extends FlatRuleS
 		val types = new mutable.HashMap[String, List[Checker]]().withDefaultValue(Nil)
 		for ((lang, c) <- checkers) {
 			for (checker <- c.seq) {
-				val text = (if (checker.caseType == CaseSensitive) "Case sensitive" else "Case insensitive") + " (" + lang+ ") "
+				val text = (if (checker.caseType == CaseSensitive) "Case sensitive" else "Case insensitive") + " (" + (if (lang.nonEmpty) lang else "All") + ") "
 				types(text) = types(text).::(checker)
 			}
 		}
