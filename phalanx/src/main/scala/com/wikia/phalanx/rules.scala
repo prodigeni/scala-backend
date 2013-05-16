@@ -1,9 +1,10 @@
 package com.wikia.phalanx
 
-import collection.mutable
+import scala.collection.{GenSeq, mutable}
 import com.twitter.util.Time
 import util.parsing.json.JSONObject
 import collection.parallel.immutable.ParSeq
+import scala.collection.parallel.ForkJoinTaskSupport
 
 class RuleViolation(rule: DatabaseRuleInfo) extends Exception {
 	def ruleIds = Seq(rule.dbId)
@@ -141,24 +142,22 @@ class FlatRuleSystem(initialRules: Iterable[DatabaseRule]) extends RuleSystem {
 }
 
 class CombinedRuleSystem(initialRules: Iterable[DatabaseRule]) extends FlatRuleSystem(initialRules) {
-  type checkerSeq = ParSeq[MultiChecker]
-	val checkers: Map[Option[String], checkerSeq] = extractCheckers.withDefaultValue(ParSeq.empty)
-	def extractCheckers: Map[Option[String], checkerSeq] = {
+  type checkerSeq = GenSeq[MultiChecker]
+  val autoParallel : (checkerSeq =>  checkerSeq) = if (Config.autoParallel()) s => s.par else s => s
+	val checkers: Map[String, checkerSeq] = {
 		val groupedByLang = initialRules.groupBy(rule => rule.language)
-		val result = for ((lang, rs) <- groupedByLang) yield (lang, Checker.combine(rs).toIndexedSeq.par)
-		result.toMap
+    val defaults = groupedByLang.get(None).map(_.toSeq).getOrElse(Seq.empty)
+		val result = for ((lang, rs) <- groupedByLang if lang.nonEmpty) yield (lang.get, autoParallel(Checker.combine(defaults ++ rs).toSeq))
+		result.toMap.withDefaultValue(autoParallel(Checker.combine(defaults).toSeq))
 	}
 	override def copy(rules: Iterable[DatabaseRule]) = new CombinedRuleSystem(rules)
-	override def firstMatch(s: Checkable): Option[DatabaseRule] = {
-    val toCheck = checkers(None) ++ checkers(Some(s.language))
-    toCheck.flatMap(c => c.firstMatch(s)).headOption
-	}
+	override def firstMatch(s: Checkable): Option[DatabaseRule] = checkers(s.language).flatMap(c => c.firstMatch(s)).headOption
 	override def combineRules: CombinedRuleSystem = this
 	override def ruleStats: Iterable[String] = {
 		val types = new mutable.HashMap[String, List[Checker]]().withDefaultValue(Nil)
 		for ((lang, c) <- checkers) {
 			for (checker <- c.seq) {
-				val text = (if (checker.caseType == CaseSensitive) "Case sensitive" else "Case insensitive") + " (" + lang.getOrElse("All langugages") + ") "
+				val text = (if (checker.caseType == CaseSensitive) "Case sensitive" else "Case insensitive") + " (" + lang+ ") "
 				types(text) = types(text).::(checker)
 			}
 		}
@@ -174,7 +173,7 @@ class CombinedRuleSystem(initialRules: Iterable[DatabaseRule]) extends FlatRuleS
 		Seq((Seq("CombinedRuleSystem", "with", "total", rules.size, "rules", "and", checkerCount, "checkers").mkString(" "))) ++ ruleStats
 	}
   override def checkerDescriptions = {
-    val c = checkers(None).seq.toSeq.sortBy(c => c.getClass.getCanonicalName)
+    val c = checkers("").seq.toSeq.sortBy(c => c.getClass.getCanonicalName)
     c.map(checker => checker match {
       case re2: Re2RegexMultiChecker => Seq(s"Re2 checker (${re2.rules.size} rules):") ++
         re2.rules.sortBy(r => r.text).map(r => s"    ${r.dbId}: ${r.text}")

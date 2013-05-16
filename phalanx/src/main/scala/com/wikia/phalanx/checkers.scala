@@ -53,7 +53,7 @@ class Re2RegexMultiChecker(val caseType: CaseType, alternatives: Map[String, Dat
     CaseSensitive -> baseOptions.setCaseSensitive(true),
     CaseInsensitive -> baseOptions.setCaseSensitive(false)
   )
-  val rules = alternatives.values.toStream
+  val rules = alternatives.values.toSeq
   val text = alternatives.keys.toSeq.sorted.mkString("|")
   val regex = try {
     new RE2(text, flags(caseType))
@@ -125,10 +125,7 @@ object Checker {
   import net.szumo.fstl.ac.StringMatcher
   val logger = NiceLogger("Checker")
   val TYPE_USER = 8
-  val groupCount = Config.workerGroups() match {
-    case 0 => Seq(1, Main.processors/2).max
-    case x => x
-  }
+  val groupCount = Config.workerGroups() max 1
   val regexSpecialChars = Seq("\\", "[", "]", "$", "^", "(", ")", "|", ".", "+", "*", "?")
   val regexSpecialCharsAndSome = regexSpecialChars ++ Seq("/", "=", "#", "<", ">", "-") // people sometimes think they have to quote this
   val regexMeaninglessPrefixes = Seq(".*")
