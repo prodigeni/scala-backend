@@ -224,7 +224,6 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
       s"User cache: ${userCache.size} (entries) / $userCacheMaxSize (size)",
       "",
       stats.statsString,
-      "",
       checkerStats
     ).mkString("\n")
     response

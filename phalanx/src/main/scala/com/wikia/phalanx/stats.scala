@@ -43,9 +43,9 @@ class RealGatherer extends StatsGatherer {
   val keepLastMinutes = Config.keepLastMinutes()
   val longRequestsMax = 10
   val breakline = "\n"+("-"*80) + "\n"
-  val timeRanges = Seq(0.microseconds, 100.microseconds,
-    1.millis, 3.millis, 10.millis, 30.millis, 100.millis, 300.millis,
-    1.seconds, 3.seconds, 10.seconds, Duration.Top).toIndexedSeq
+  val timeRanges = Seq(0.microseconds, 200.microseconds, 500.microseconds,
+    1.millis, 2.millis, 5.millis, 10.millis, 20.millis, 50.millis, 100.millis, 200.millis, 500.millis,
+    1.seconds, 2.seconds, 5.seconds, 10.seconds, Duration.Top).toIndexedSeq
   private val pool = FuturePool(java.util.concurrent.Executors.newSingleThreadExecutor())
   type TimeCounts = Array[Long]
 
@@ -56,10 +56,10 @@ class RealGatherer extends StatsGatherer {
     override def toString =  (Seq(
       s"Total time spent matching: $totalTime",
       s"Average time spent matching: $avgTime",
-      s"Matches done: $matchCount",
-      s"User cache hits: $cacheHits",
       s"Cache hit %: ${if (matchCount+cacheHits>0) cacheHits*100/(matchCount+cacheHits) else "unknown"}",
-      s"Longest request time: ${longRequests.lastOption.map(_.duration.niceString()).getOrElse("unknown")}"
+      s"Longest request time: ${longRequests.lastOption.map(_.duration.niceString()).getOrElse("unknown")}",
+      s"User cache hits: $cacheHits",
+      f"Requests total: $matchCount%41d"
       ) ++ timeBreakDown).mkString("\n")
     def timeBreakDown:Seq[String] = {
       for ( (range, count) <- timeRanges.sliding(2).toSeq.zip(counts.toSeq) ) yield (
@@ -131,7 +131,8 @@ class RealGatherer extends StatsGatherer {
   def statsString: String = {
     dropOldTimes()
     val now = Time.now.toString()
-    (Seq(full) ++ aggregate(last.values)).map(s => s"Statistics from ${s.since} to $now\n${s.toString}\n").mkString("\n")
+    def label(sub:SubStats, period:String):String = s"Stats $period:\n  From ${sub.since} to $now\n"+sub.toString.split('\n').map(s => "  "+s).mkString("\n")+"\n\n"
+    label(full, "since last full reload") + aggregate(last.values).map(s => label(s, s"for last $keepLastMinutes minutes")).getOrElse("")
   }
   def longStats:String = full.longStats
   def totalTime:String = full.totalTime
