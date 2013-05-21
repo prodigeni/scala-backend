@@ -74,6 +74,7 @@ object Config extends SysPropConfig {
   val newRelic = Performance.bool(cwp+"newRelic", "Enable NewRelic (only if NewRelic agent is loaded and environment set)", true)
   val keepLastMinutes = Performance.int(cwp+"keepStats", "Keep separate performance stats for last n minutes (if detailedStats)", 5)
   val longRequestsMax = Performance.int(cwp+"longRequestsMax", "How many longest requests to remember", 10)
+  val preloadClasses = Performance.bool(cwp+"preloadClasses", "Should all library classes be preloaded at server start", true)
 
   val Network = Group("Network configuration")
   val port = Network.int(cwp+"port", "HTTP listening port", 4666)
@@ -151,13 +152,15 @@ object Main extends App {
     case None => "No configuration file specified, using defaults."
   })
 
-	val preloaded = PackagePreloader(this.getClass, Seq(
-		"com.wikia.phalanx",
-		"com.twitter.finagle.http",
-		"com.twitter.util",
-    "net.szumo.fstl"
-	))
-	logger.info("Preloaded " + preloaded.size + " classes")
+  if (Config.preloadClasses()) {
+    val preloaded = PackagePreloader(this.getClass, Seq(
+      "com.wikia.phalanx",
+      "com.twitter.finagle.http",
+      "com.twitter.util",
+      "net.szumo.fstl"
+    ))
+    logger.info("Preloaded " + preloaded.size + " classes")
+  }
 
 	val scribe = {
 		val scribetype = Config.scribeType()

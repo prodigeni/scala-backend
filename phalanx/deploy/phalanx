@@ -1,5 +1,5 @@
 #!/bin/sh
 PHALANX_DIR=`dirname $0`
-JAVA_OPTIONS="-Xms1024m -Xmn512m -Xmx1024m -XX:+UseNUMA -XX:+UseCondCardMark -XX:-UseBiasedLocking -XX:+UseConcMarkSweepGC -XX:+UseParNewGC"
+JAVA_OPTIONS="-Xms64m -Xmn32m -Xmx256m -XX:+UseNUMA -XX:+UseCondCardMark -XX:-UseBiasedLocking -XX:+UseConcMarkSweepGC -XX:+UseParNewGC"
 java $JAVA_OPTIONS -jar $PHALANX_DIR/phalanx-server.jar $@
 
