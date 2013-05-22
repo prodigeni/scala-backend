@@ -34,23 +34,27 @@ case class NewRelicError(e:Throwable) extends NewRelicResponse {
 
 abstract class NewRelicHttpFilter extends SimpleFilter[Request, Response] {
 	val logger = LoggerFactory.getLogger("NewRelic")
-	def classifier(request: Request):String
+	def classifier(request: Request):Option[String]
 	def timeString(duration: Duration) = duration.inMillis.toString + "ms"
 	def apply(request: Request, service: Service[Request, Response]) = {
     val elapsed = com.twitter.util.Stopwatch.start()
-		val name = classifier(request)
-		val nReq = NewRelicReq(name, request)
-		val future = service(request)
-		future.onSuccess { response =>
-			val duration = elapsed()
-			logger.trace(name + " " + timeString(duration))
-			reportOk(nReq, duration, NewRelicOK(response))
-		}
-			.onFailure { e =>
-			val duration = elapsed()
-			logger.warn(name + " " + timeString(duration), e)
-			reportErr(nReq, duration, e)
-		}
+		classifier(request) match {
+      case Some(name) => {
+        val nReq = NewRelicReq(name, request)
+        val future = service(request)
+        future.onSuccess { response =>
+          val duration = elapsed()
+          logger.trace(name + " " + timeString(duration))
+          reportOk(nReq, duration, NewRelicOK(response))
+        }
+          .onFailure { e =>
+          val duration = elapsed()
+          logger.warn(name + " " + timeString(duration), e)
+          reportErr(nReq, duration, e)
+        }
+      }
+      case _ => service(request) // don't include other requests in NewRelic stats
+    }
 	}
 	@agent.Trace(dispatcher=true)
 	def reportOk(req:NewRelicReq, duration:Duration, resp: NewRelicResponse) {
@@ -68,11 +72,8 @@ abstract class NewRelicHttpFilter extends SimpleFilter[Request, Response] {
 }
 
 object NewRelic extends NewRelicHttpFilter {
-	def classifier(request: Request):String = {
-		val name = request.path
-		request.params.get("type") match {
-			case Some(x) => name + "?type="+x
-			case None => name
-		}
+	def classifier(request: Request):Option[String] = {
+    val allTypes = request.params.getAll("type")
+    if (allTypes.isEmpty) None else Some(allTypes.toSeq.sorted.mkString(","))
 	}
 }
