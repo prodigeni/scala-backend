@@ -85,7 +85,7 @@ object Config extends SysPropConfig {
   val cancelOnHangup = Network.bool(cwp+"cancelOnHangup", "Cancel requests if connection lost", true)
   val backlog = Network.int(cwp+"backlog", "Listening socket backlog size", 1000)
   val keepAlive = Network.bool(cwp+"keepAlive", "Use HTTP 1.1 keep alives", true)
-  val maxIdleTime = Network.int(cwp+"maxIdleTime", "How long to wait before closing a keep alive connection, in seconds", 1)
+  val maxIdleTime = Network.float(cwp+"maxIdleTime", "How long to wait before closing a keep alive connection, in seconds", 1)
 
   val Scribe = Group("Scribe configuration - used to relay information about successful matches")
   val scribeType = Scribe.string(cwp+"scribe", "Scribe type: send, buffer or discard", "discard")
@@ -195,7 +195,7 @@ object Main extends App {
     .cancelOnHangup(Config.cancelOnHangup())
 		.backlog(Config.backlog())
     .keepAlive(Config.keepAlive())
-    .hostConnectionMaxIdleTime(Config.maxIdleTime().seconds)
+    .hostConnectionMaxIdleTime(com.twitter.util.Duration.fromMilliseconds((Config.maxIdleTime()*1000).toLong))
 		.bindTo(new java.net.InetSocketAddress(port))
 
   def buildService = {

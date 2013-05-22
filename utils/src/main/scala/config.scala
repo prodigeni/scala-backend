@@ -52,10 +52,23 @@ class SysPropConfig {
         case None => default
       })
   }
+  def float(key: String, doc:String, default:Float, group: String):FValue[Float] = {
+    remember(group, key, doc, default.toString,
+      () => get(key) match {
+        case Some("") => default
+        case Some(x) => try {
+          x.replace(',', '.').toFloat
+        } catch {
+          case _:NumberFormatException => throw new ConfigException(s"Invalid value '$x' for float configuration key '$key'")
+        }
+        case None => default
+      })
+  }
   case class Group(groupDoc:String) {
     def bool(key:String, doc: String, default:Boolean):FValue[Boolean] = outer.bool(key, doc, default, groupDoc)
     def string(key:String, doc: String, default:String):FValue[String] = outer.string(key, doc, default, groupDoc)
     def int(key:String, doc: String, default:Int):FValue[Int] = outer.int(key, doc, default, groupDoc)
+    def float(key:String, doc: String, default:Int):FValue[Float] = outer.float(key, doc, default, groupDoc)
   }
   def setDefaults() {
     remembered.foreach( (t:(String, Remembered)) => t match {

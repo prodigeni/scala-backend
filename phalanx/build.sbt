@@ -40,7 +40,7 @@ libraryDependencies ++= Seq(
   "com.logentries.re2" % "libre2-java" % "1.0",
   "net.szumo" %% "fstl-common" % "0.6",
   "net.szumo" %% "fstl-ac" % "0.6",
-  "com.wikia" %% "utils" % "0.2",
+  "com.wikia" %% "utils" % "0.3",
   "com.wikia" %% "wikifactory" % "0.13",
   "com.typesafe.slick" %% "slick" % "1.0.0",
   "com.twitter" % "finagle-core_2.10" % "6.1.1",
