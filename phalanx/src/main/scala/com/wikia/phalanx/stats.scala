@@ -14,6 +14,7 @@ trait StatsGatherer {
   def avgTime:String
   def statsString:String
   def longStats:String
+  def toMap:Map[String, Any]
 }
 
 object NullGatherer extends StatsGatherer {
@@ -25,6 +26,7 @@ object NullGatherer extends StatsGatherer {
   def avgTime:String = "unknown"
   def statsString:String = ""
   def longStats:String = ""
+  def toMap:Map[String, Any] = Map.empty
 }
 
 class RealGatherer extends StatsGatherer {
@@ -54,10 +56,10 @@ class RealGatherer extends StatsGatherer {
     def this() = this(Time.now, 0, 0, 0.microsecond, 0.microsecond,
       collection.mutable.SortedSet.empty[LongRequest], Array.fill(timeRanges.length)(0L))
     override def toString =  (Seq(
-      s"Total time spent matching: $totalTime",
-      s"Average time spent matching: $avgTime",
-      s"Cache hit %: ${if (matchCount+cacheHits>0) cacheHits*100/(matchCount+cacheHits) else "unknown"}",
-      s"Longest request time: ${longRequests.lastOption.map(_.duration.niceString()).getOrElse("unknown")}",
+      s"Total time spent matching: ${matchTime.niceString()}",
+      s"Average time spent matching: ${avgTime.map(d=>d.niceString()).getOrElse("unknown")}",
+      s"Cache hit %: ${cacheHitPercent.getOrElse("unknown")}",
+      s"Longest request time: ${longestRequestTime.getOrElse("unknown")}",
       s"User cache hits: $cacheHits",
       f"Requests total: $matchCount%41d"
       ) ++ timeBreakDown).mkString("\n")
@@ -65,11 +67,12 @@ class RealGatherer extends StatsGatherer {
       for ( (range, count) <- timeRanges.sliding(2).toSeq.zip(counts.toSeq) ) yield (
         f"Requests ${range(0).niceString()}%16s to ${range(1).niceString()}%16s: $count%10d " + (if (matchCount>0) f"(${count*100/matchCount}%2d%)" else ""))
     }
+    def cacheHitPercent:Option[Int] = if (matchCount+cacheHits>0) Some(cacheHits*100/(matchCount+cacheHits)) else None
+    def longestRequestTime: Option[String] = longRequests.lastOption.map(_.duration.niceString())
     def longStats:String = longRequests.toSeq.reverse.map(_.toString).mkString(breakline)
-    def totalTime:String = matchTime.niceString()
-    def avgTime: String = matchCount match {
-      case 0 => "unknown"
-      case x => (matchTime / x).niceString()
+    def avgTime: Option[Duration] = matchCount match {
+      case 0 => None
+      case x => Some(matchTime / x)
     }
 
   }
@@ -128,13 +131,33 @@ class RealGatherer extends StatsGatherer {
   }
   def cacheHit() = pool { subStats.foreach(s => s.cacheHits += 1)}
   def reset() = pool {  full = new SubStats() }
+  def label(sub:SubStats, period:String, now:String):String = s"Stats $period:\n  From ${sub.since} to $now\n"+sub.toString.split('\n').map(s => "  "+s).mkString("\n")+"\n\n"
   def statsString: String = {
     dropOldTimes()
     val now = Time.now.toString()
-    def label(sub:SubStats, period:String):String = s"Stats $period:\n  From ${sub.since} to $now\n"+sub.toString.split('\n').map(s => "  "+s).mkString("\n")+"\n\n"
-    label(full, "since last full reload") + aggregate(last.values).map(s => label(s, s"for last $keepLastMinutes minutes")).getOrElse("")
+    label(full, "since last full reload", now) + aggregate(last.values).map(s => label(s, s"for last $keepLastMinutes minutes", now)).getOrElse("")
   }
   def longStats:String = full.longStats
-  def totalTime:String = full.totalTime
-  def avgTime: String = full.avgTime
+  def totalTime:String = full.matchTime.niceString()
+  def avgTime: String = full.avgTime.map(d => d.niceString()).getOrElse("unknown")
+  def toMap:Map[String, Any] = {
+    dropOldTimes()
+    val now = Time.now.toString()
+    def convert(sub:SubStats):Map[String,Any] = Map(
+      "Since" -> sub.since.toString,
+      "To" -> now,
+      "Total time spent matching" -> sub.matchTime,
+      "Average time spent matching" -> sub.avgTime,
+      "Cache hit %" -> sub.cacheHitPercent,
+      "Longest request time" -> sub.longRequests.lastOption.map(lr => lr.duration),
+      "User cache hits" -> sub.cacheHits,
+      "Requests total" -> sub.matchCount
+    )
+    val current = aggregate(last.values)
+    val result:Map[String, Any] = Map("since_full_reload" -> convert(full))
+    current match {
+      case None => result
+      case Some(x) => result ++ Map("current" -> convert(x))
+    }
+  }
 }

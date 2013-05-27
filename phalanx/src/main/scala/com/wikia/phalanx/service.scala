@@ -275,6 +275,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
       case "stats/avg" => stats(Respond(stats.avgTime))
       case "stats/long" => stats(Respond(stats.longStats))
       case "stats/checkers" => stats(Respond(checkerDescriptions))
+      case "stats.json" => stats(Respond.json(stats))
       case "stats" => stats(Respond(statsString))
       case "view" => futurePool(viewRule(request))
       case "favicon.ico" => Future.value(favicon)

@@ -27,6 +27,18 @@ class ExceptionLogger[Req, Rep](val logger: NiceLogger) extends SimpleFilter[Req
 }
 
 object Respond {
+  def jsonFormatter(x : Any):String = x match {
+    case s : String => "\"" + JSONFormat.quoteString(s) + "\""
+    case None => "null"
+    case Some(s) => jsonFormatter(s)
+    case jo : JSONObject => jo.toString(jsonFormatter)
+    case ja : JSONArray => ja.toString(jsonFormatter)
+    case list : List[_] => JSONArray(list).toString(jsonFormatter)
+    case map : Map[_,_] => JSONObject(map.map(x => (x._1.toString, x._2))).toString(jsonFormatter)
+    case duration: com.twitter.util.Duration => (duration.inMicroseconds.toDouble / 1000000).toString
+    case other => other.toString
+  }
+
 	def apply(content: String, status: org.jboss.netty.handler.codec.http.HttpResponseStatus = Status.Ok, contentType: String = "text/plain; charset=utf-8") = {
 		val response = Response(Version.Http11, status)
 		response.contentType = contentType
@@ -35,12 +47,16 @@ object Respond {
 	}
 	def json(data: Iterable[DatabaseRuleInfo]) = {
 		val jsonData = JSONArray(data.toList.map(x => x.toJSONObject))
-		Respond(jsonData.toString(JSONFormat.defaultFormatter), Status.Ok, Message.ContentTypeJson)
+		Respond(jsonData.toString(jsonFormatter), Status.Ok, Message.ContentTypeJson)
 	}
 	def json(data: Map[String, DatabaseRuleInfo]) = {
 		val jsonData = JSONObject(data.mapValues(x => x.toJSONObject))
-		Respond(jsonData.toString(JSONFormat.defaultFormatter), Status.Ok, Message.ContentTypeJson)
+		Respond(jsonData.toString(jsonFormatter), Status.Ok, Message.ContentTypeJson)
 	}
+  def json(data: StatsGatherer) = {
+    val jsonData = JSONObject(data.toMap)
+    Respond(jsonData.toString(jsonFormatter), Status.Ok, Message.ContentTypeJson)
+  }
   def fromResource(path: String, contentType: String) = {
     val stream = getClass.getResourceAsStream(path)
     assert(stream != null, s"Could not find resource $path")
