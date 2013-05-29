@@ -132,7 +132,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
     def response = {
       if (ruleSystems.isEmpty) Respond.unknownType else {
         if (content.isEmpty) 	Respond.contentMissing	else {
-          logger.trace(s"check: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
+          logger.trace(s"check: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches expected=$expected")
           if (matches.isEmpty) Respond.ok else Respond.failure
         }
       }
@@ -142,7 +142,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
     def response = {
       if (ruleSystems.isEmpty) Respond.unknownType else {
         if (content.isEmpty) Respond.contentMissing	else {
-          logger.trace(s"match: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches")
+          logger.trace(s"match: lang=$lang user=$user wiki=$wiki checkTypes=$checkTypes content=$content matches=$matches expected=$expected")
           Respond.json(matches)
         }
       }
