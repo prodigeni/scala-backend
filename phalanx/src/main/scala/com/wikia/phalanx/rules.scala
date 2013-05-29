@@ -3,8 +3,6 @@ package com.wikia.phalanx
 import scala.collection.{GenSeq, mutable}
 import com.twitter.util.Time
 import util.parsing.json.JSONObject
-import collection.parallel.immutable.ParSeq
-import scala.collection.parallel.ForkJoinTaskSupport
 
 class RuleViolation(rule: DatabaseRuleInfo) extends Exception {
 	def ruleIds = Seq(rule.dbId)

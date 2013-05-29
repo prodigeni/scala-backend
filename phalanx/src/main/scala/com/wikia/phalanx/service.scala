@@ -8,6 +8,7 @@ import com.twitter.finagle.builder.ClientBuilder
 import com.twitter.finagle.http.{Http, Response, Request}
 import com.twitter.util.{Time, TimerTask, SynchronizedLruMap, Future, FuturePool}
 import java.util.NoSuchElementException
+import scala.collection.mutable
 
 trait ParsedRequest {
   def request: Request
@@ -26,7 +27,8 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
   var expireWatchTask: Option[TimerTask] = None
   val userCacheMaxSize = Config.userCacheMaxSize()
   val stats:StatsGatherer = if (Config.detailedStats()) new RealGatherer() else NullGatherer
-  val userCache:collection.mutable.Map[String, Option[DatabaseRuleInfo]] = new SynchronizedLruMap[String, Option[DatabaseRuleInfo]](userCacheMaxSize)
+  val userCache:mutable.Map[String, Option[DatabaseRuleInfo]] = new SynchronizedLruMap[String, Option[DatabaseRuleInfo]](userCacheMaxSize)
+  val differences:mutable.Set[Int] = new mutable.HashSet[Int] with mutable.SynchronizedSet[Int] // for unexpected differences between old and new phalanx
   val notifyMap = {
     val localhost = java.net.InetAddress.getLocalHost.getHostName
     logger.debug(s"Local hostname: $localhost")
@@ -46,7 +48,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
     }).toMap
   }
   val timer = com.twitter.finagle.util.DefaultTimer.twitter
-  @transient var rules = reloader(Map.empty, Seq.empty)
+  @transient var rules:Map[String, RuleSystem] = reloader(Map.empty, Seq.empty)
   val threadPoolSize:Int = Config.serviceThreadCount() match {
     case 0 => Seq(1, Main.processors).max
     case x => x
@@ -75,6 +77,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
         case _: NoSuchElementException => Set.empty
       }
     }
+    val expected = params.get("expected").map(_.toInt)
     val combinations: Iterable[(RuleSystem, Checkable)] = (for (r <- ruleSystems;c <- content) yield (r, c))
     val cacheable:Option[String] = checkTypes match {
       case "user" :: Nil => Some(params.getAll("content").mkString("|"))
@@ -96,6 +99,18 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
             case _ => ()
           }
           stats.storeRequest(elapsed(), this)
+          expected match {
+            case Some(expectedId) => {
+              val got = result.map(r => r.dbId).getOrElse(0)
+              if (got != expectedId) {
+                // old phalanx result was different, log the difference
+                val first = content.head.text
+                logger.warn(s"Results different in old phalanx: expected = $expectedId, got = $got, content = ${if (first.length < 60) first else "[too long]"}, refererer = ${request.referer.getOrElse("")}")
+                differences ++= Seq(got, expectedId).filter(_ != 0)
+              }
+            }
+            case _ => ()
+          }
           result
         }
       }
@@ -177,7 +192,12 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
   }
   def refreshRules(expired: Traversable[Int]) {
     rules = reloader(rules, expired).toMap
-    if (expired.isEmpty) stats.reset()
+    if (expired.isEmpty) {
+      stats.reset()
+      differences.clear()
+    } else {
+      differences --= expired
+    }
     watchExpired()
   }
   type checkOrMatch = (Iterable[RuleSystem], Iterable[Checkable], Option[String], Option[Int]) => Response
@@ -263,6 +283,15 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
     }
     result
   }
+  def findRuleById(id: Int): Option[DatabaseRuleInfo] = {
+    rules.values.view.flatMap(x => x.rules.find(r => r.dbId == id)).headOption
+  }
+  def differencesResponse: Response = {
+    val ids = differences.toIndexedSeq.sorted
+    val ruleSeq = ids.flatMap(id => findRuleById(id))
+    val diffPage = new DifferencesPage(ruleSeq)
+    diffPage.response
+  }
   def apply(request: Request): Future[Response] = {
     stripPath(request) match {
       case "" => Future(Respond("PHALANX ALIVE"))
@@ -276,6 +305,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
       case "stats/long" => stats(Respond(stats.longStats))
       case "stats/checkers" => stats(Respond(checkerDescriptions))
       case "stats.json" => stats(Respond.json(stats))
+      case "differences" => futurePool { differencesResponse }
       case "stats" => stats(Respond(statsString))
       case "view" => futurePool(viewRule(request))
       case "favicon.ico" => Future.value(favicon)
