@@ -66,6 +66,7 @@ object Respond {
     val response = Response(com.twitter.finagle.http.Version.Http11, org.jboss.netty.handler.codec.http.HttpResponseStatus.OK)
     response.contentType = contentType
     response.content = org.jboss.netty.buffer.ChannelBuffers.wrappedBuffer(bytes)
+    response.cacheControl = com.twitter.util.Duration.fromTimeUnit(90, java.util.concurrent.TimeUnit.DAYS)
     response
   }
 	def error(info: String, status: HttpResponseStatus = Status.InternalServerError) = Respond(info + "\n", status)
