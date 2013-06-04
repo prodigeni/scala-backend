@@ -35,6 +35,9 @@ class DataTests extends FlatSpec {
 		intercept[RuleViolation] {
 			rs.check(Checkable("fuck"))
 		}
+    intercept[RuleViolation] {
+      rs.check(Checkable("Fuck"))
+    }
 		rs.check(Checkable("something else"))
 		rs.stats
 	}

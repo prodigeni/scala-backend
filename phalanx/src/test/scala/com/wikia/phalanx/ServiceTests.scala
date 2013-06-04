@@ -86,7 +86,16 @@ class ServiceTests extends FlatSpec {
 		}
 	}
 
-	it should "work with GET, also without explicit type" in {
+  it should "work with GET with different case" in {
+    checkScribe {
+      val request = RequestBuilder().url(address + "check?user=ala&wiki=1&type=tests&content=FUck&content=ok").buildGet()
+      val response = client(request)()
+      val content = response.getContent.toString(charset)
+      assert(content === "failure\n")
+    }
+  }
+
+  it should "work with GET, also without explicit type" in {
 		checkScribe {
 			val request = RequestBuilder().url(address + "check?user=ala&wiki=1&content=fuck").buildGet()
 			val response = client(request)()

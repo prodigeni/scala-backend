@@ -198,6 +198,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
     } else {
       differences --= expired
     }
+    userCache.clear()
     watchExpired()
   }
   type checkOrMatch = (Iterable[RuleSystem], Iterable[Checkable], Option[String], Option[Int]) => Response
