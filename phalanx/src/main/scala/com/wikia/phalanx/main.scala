@@ -6,7 +6,7 @@ import com.twitter.finagle.builder.ServerBuilder
 import com.twitter.finagle.http.filter.ExceptionFilter
 import com.twitter.finagle.http.{Http, Request, Status, Version, Response, Message, RichHttp}
 import com.twitter.finagle.{SimpleFilter, Service}
-import com.twitter.util.Future
+import com.twitter.util.{StorageUnit, Future}
 import com.wikia.utils.SysPropConfig
 import com.wikia.wikifactory.DB
 import java.io.{FileInputStream, File}
@@ -203,8 +203,12 @@ object Main extends App {
 		new ExceptionLogger(logger) andThen scribe,
     notifyNodes
 	)
+  val httpCodec = {
+    import com.twitter.conversions.storage._
+    Http().copy(_maxRequestSize = 32.megabytes)
+  }
 	val config = ServerBuilder()
-		.codec(RichHttp[Request](Http()))
+		.codec(RichHttp[Request](httpCodec))
 		.name("Phalanx")
     .maxConcurrentRequests(Config.maxConcurrentRequests())
 		.sendBufferSize(Config.sendBufferSize())
