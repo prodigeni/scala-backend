@@ -217,7 +217,7 @@ object Main extends App {
 
   def buildService = {
     sys.props.get("newrelic.environment") match {
-      case Some(x) if Config.newRelic() => ExceptionFilter andThen NewRelic andThen mainService
+      // case Some(x) if Config.newRelic() => ExceptionFilter andThen NewRelic andThen mainService // disabled for NewRelic 2.19
       case _ => ExceptionFilter andThen mainService
     }
   }
