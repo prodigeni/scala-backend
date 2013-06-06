@@ -215,7 +215,12 @@ object Main extends App {
     .hostConnectionMaxIdleTime(com.twitter.util.Duration.fromMilliseconds((Config.maxIdleTime()*1000).toLong))
 		.bindTo(new java.net.InetSocketAddress(port))
 
-  def buildService = ExceptionFilter andThen mainService
+  def buildService = {
+    sys.props.get("newrelic.environment") match {
+      // case Some(x) if Config.newRelic() => ExceptionFilter andThen NewRelic andThen mainService // disabled for NewRelic 2.19
+      case _ => ExceptionFilter andThen mainService
+    }
+  }
 
 	val server = config.build(buildService)
 	logger.info(s"Listening on port: $port")
@@ -223,7 +228,7 @@ object Main extends App {
 
 	sys.addShutdownHook {
 		logger.warn("Terminating")
-		server.close(1.seconds)
+		server.close(3.seconds)
 		mainService.close()
 		logger.warn("Shutdown complete")
 	}
