@@ -51,7 +51,7 @@ class RealGatherer extends StatsGatherer {
   private val pool = FuturePool(java.util.concurrent.Executors.newSingleThreadExecutor())
   type TimeCounts = Array[Long]
 
-  class SubStats(val since:Time, var matchCount: Int, var cacheHits: Int, var matchTime:Duration, var longRequestThreshold:Duration,
+  class SubStats(val since:Time, var matchCount: Long, var cacheHits: Long, var matchTime:Duration, var longRequestThreshold:Duration,
                  val longRequests:collection.mutable.SortedSet[LongRequest], val counts: TimeCounts ) {
     def this() = this(Time.now, 0, 0, 0.microsecond, 0.microsecond,
       collection.mutable.SortedSet.empty[LongRequest], Array.fill(timeRanges.length)(0L))
@@ -67,7 +67,7 @@ class RealGatherer extends StatsGatherer {
       for ( (range, count) <- timeRanges.sliding(2).toSeq.zip(counts.toSeq) ) yield (
         f"Requests ${range(0).niceString()}%16s to ${range(1).niceString()}%16s: $count%10d " + (if (matchCount>0) f"(${count*100/matchCount}%2d%)" else ""))
     }
-    def cacheHitPercent:Option[Int] = if (matchCount+cacheHits>0) Some(cacheHits*100/(matchCount+cacheHits)) else None
+    def cacheHitPercent:Option[Long] = if (matchCount+cacheHits>0) Some(cacheHits*100/(matchCount+cacheHits)) else None
     def longestRequestTime: Option[String] = longRequests.lastOption.map(_.duration.niceString())
     def longStats:String = longRequests.toSeq.reverse.map(_.toString).mkString(breakline)
     def avgTime: Option[Duration] = matchCount match {
@@ -95,14 +95,14 @@ class RealGatherer extends StatsGatherer {
   }
 
   var full = new SubStats()
-  var last = collection.mutable.Map.empty[Int, SubStats]
+  var last = collection.mutable.Map.empty[Long, SubStats]
 
   def apply[T](f: => T): Future[T] = pool.apply(f)
-  def dropOldTimes(time: Int) {
+  def dropOldTimes(time: Long) {
     val dropOff = time - keepLastMinutes
     last --= last.keys.filter(p => p<=dropOff)
   }
-  def subStatsForTime(time: Int): SubStats = {
+  def subStatsForTime(time: Long): SubStats = {
     last.get(time) match {
       case Some(substats) => substats
       case None => {
