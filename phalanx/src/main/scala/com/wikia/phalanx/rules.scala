@@ -84,8 +84,9 @@ case class DatabaseRule(text: String, dbId: Int, reason: String, caseSensitive: 
                         language: Option[String], expires: Option[Time], authorId: Int, typeMask: Int) extends DatabaseRuleInfo with Rule {
 	val caseType = if (caseSensitive || DatabaseRuleInfo.letterPattern.findFirstIn(text).isEmpty) CaseSensitive else CaseInsensitive
   val checker: Checker = {
-		if (regex) Checker.regex(caseType, text, typeMask)
-		else {
+		if (regex) {
+      Checker.regex(caseType, if (exact) "^" + text.stripPrefix("^").stripSuffix("$") + "$" else text, typeMask)
+    } else {
 			if (exact) Checker.exact(caseType, caseType(text)) else Checker.contains(caseType, caseType(text))
 		}
 	}
