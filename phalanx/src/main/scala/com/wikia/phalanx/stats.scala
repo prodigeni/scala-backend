@@ -44,7 +44,7 @@ class RealGatherer extends StatsGatherer {
 
   val keepLastMinutes = Config.keepLastMinutes()
   val longRequestsMax = 10
-  val breakline = "\n"+("-"*80) + "\n"
+  val breakline = "\n"+"-"*80 + "\n"
   val timeRanges = Seq(0.microseconds, 200.microseconds, 500.microseconds,
     1.millis, 2.millis, 5.millis, 10.millis, 20.millis, 50.millis, 100.millis, 200.millis, 500.millis,
     1.seconds, 2.seconds, 5.seconds, 10.seconds, Duration.Top).toIndexedSeq
@@ -64,8 +64,8 @@ class RealGatherer extends StatsGatherer {
       f"Requests total: $matchCount%41d"
       ) ++ timeBreakDown).mkString("\n")
     def timeBreakDown:Seq[String] = {
-      for ( (range, count) <- timeRanges.sliding(2).toSeq.zip(counts.toSeq) ) yield (
-        f"Requests ${range(0).niceString()}%16s to ${range(1).niceString()}%16s: $count%10d " + (if (matchCount>0) f"(${count*100/matchCount}%2d%)" else ""))
+      for ( (range, count) <- timeRanges.sliding(2).toSeq.zip(counts.toSeq) ) yield
+        f"Requests ${range(0).niceString()}%16s to ${range(1).niceString()}%16s: $count%10d " + (if (matchCount>0) f"(${count*100/matchCount}%2d%)" else "")
     }
     def cacheHitPercent:Option[Long] = if (matchCount+cacheHits>0) Some(cacheHits*100/(matchCount+cacheHits)) else None
     def longestRequestTime: Option[String] = longRequests.lastOption.map(_.duration.niceString())
@@ -151,7 +151,7 @@ class RealGatherer extends StatsGatherer {
       "Cache hit %" -> sub.cacheHitPercent,
       "Longest request time" -> sub.longRequests.lastOption.map(lr => lr.duration),
       "User cache hits" -> sub.cacheHits,
-      "Requests total" -> sub.matchCount
+      "Requests total (not cached)" -> sub.matchCount
     )
     val current = aggregate(last.values)
     val result:Map[String, Any] = Map("since_full_reload" -> convert(full))

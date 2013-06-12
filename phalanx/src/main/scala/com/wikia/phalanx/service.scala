@@ -78,14 +78,14 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
       }
     }
     val expected = params.get("expected").map(_.toInt)
-    val combinations: Iterable[(RuleSystem, Checkable)] = (for (r <- ruleSystems;c <- content) yield (r, c))
+    val combinations: Iterable[(RuleSystem, Checkable)] = for (r <- ruleSystems;c <- content) yield (r, c)
     val cacheable:Option[String] = checkTypes match {
       case "user" :: Nil => Some(params.getAll("content").mkString("|"))
       case _ => None
     }
     lazy val matches: Option[DatabaseRuleInfo] = {
       cacheable match {
-        case Some(value) if (userCache.contains(value)) => {
+        case Some(value) if userCache.contains(value) => {
           stats.cacheHit()
           userCache(value)
         }
