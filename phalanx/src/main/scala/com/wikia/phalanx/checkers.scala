@@ -155,6 +155,7 @@ object Checker {
       pattern = unquoteRegex(pattern)
     }
     // guessing starts here
+    /* this was too aggressive and caused problems
     if (needsRealRegex) {
       heurestics.find( p => pattern.startsWith(p)) match {
         case Some(start) => {
@@ -164,6 +165,7 @@ object Checker {
         case None => if (pattern.toSet[Char].subsetOf(digitsAndDot)) needsRealRegex = false // assume they meant real dot
       }
     }
+    */
     InvalidRegex.checkForError(pattern) match {
       case Some(s) => pattern = text // we broke something, revert
       case _ => ()
