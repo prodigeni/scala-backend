@@ -182,7 +182,7 @@ object Checker {
   def combine(rules: Iterable[DatabaseRule]):Iterable[MultiChecker] = {
     val regexPattern:PartialFunction[DatabaseRule, (String, DatabaseRule)] = (rule:DatabaseRule) => rule.checker match {
       case cc:Re2RegexChecker => (cc.regexPattern, rule)
-      case cc:JavaRegexChecker if (InvalidRegex.checkForError(cc.text) == None) => (cc.regexPattern, rule)
+      case cc:JavaRegexChecker if InvalidRegex.checkForError(cc.text) == None => (cc.regexPattern, rule)
     }
     val exactPattern:PartialFunction[DatabaseRule, (String, DatabaseRule)] = (rule:DatabaseRule) => rule.checker match {
       case ExactChecker(_, text) => (text, rule)
