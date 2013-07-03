@@ -15,6 +15,8 @@ trait StatsGatherer {
   def statsString:String
   def longStats:String
   def toMap:Map[String, Any]
+  def updateLastRuleChange(): Future[Unit]
+  def lastRuleChange:Option[Time]
 }
 
 object NullGatherer extends StatsGatherer {
@@ -27,6 +29,8 @@ object NullGatherer extends StatsGatherer {
   def statsString:String = ""
   def longStats:String = ""
   def toMap:Map[String, Any] = Map.empty
+  def updateLastRuleChange() = Future.Done
+  def lastRuleChange = None
 }
 
 class RealGatherer extends StatsGatherer {
@@ -44,6 +48,7 @@ class RealGatherer extends StatsGatherer {
 
   val keepLastMinutes = Config.keepLastMinutes()
   val longRequestsMax = 10
+  var lastRuleChange:Option[Time] = Some(Time.now)
   val breakline = "\n"+"-"*80 + "\n"
   val timeRanges = Seq(0.microseconds, 200.microseconds, 500.microseconds,
     1.millis, 2.millis, 5.millis, 10.millis, 20.millis, 50.millis, 100.millis, 200.millis, 500.millis,
@@ -65,7 +70,7 @@ class RealGatherer extends StatsGatherer {
       ) ++ timeBreakDown).mkString("\n")
     def timeBreakDown:Seq[String] = {
       for ( (range, count) <- timeRanges.sliding(2).toSeq.zip(counts.toSeq) ) yield
-        f"Requests ${range(0).niceString()}%16s to ${range(1).niceString()}%16s: $count%10d " + (if (matchCount>0) f"(${count*100/matchCount}%2d%)" else "")
+        f"Requests ${range(0).niceString()}%16s to ${range(1).niceString()}%16s: $count%10d " + (if (matchCount>0) f"(${count*100/matchCount}%2d%%)" else "")
     }
     def cacheHitPercent:Option[Long] = if (matchCount+cacheHits>0) Some(cacheHits*100/(matchCount+cacheHits)) else None
     def longestRequestTime: Option[String] = longRequests.lastOption.map(_.duration.niceString())
@@ -154,10 +159,11 @@ class RealGatherer extends StatsGatherer {
       "Requests total (not cached)" -> sub.matchCount
     )
     val current = aggregate(last.values)
-    val result:Map[String, Any] = Map("since_full_reload" -> convert(full))
+    val result:Map[String, Any] = Map("since_full_reload" -> convert(full), "last_rule_change" -> lastRuleChange.map(_.toString()).getOrElse(""))
     current match {
       case None => result
       case Some(x) => result ++ Map("current" -> convert(x))
     }
   }
+  def updateLastRuleChange() = pool { lastRuleChange = Some(Time.now) }
 }

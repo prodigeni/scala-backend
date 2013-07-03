@@ -1,12 +1,13 @@
 package com.wikia.phalanx
 
 import com.twitter.finagle.Service
-import com.twitter.util.{Time, Duration, FuturePool, Future}
+import com.twitter.util._
 import com.wikia.wikifactory.ScribeLogger
 import java.util.concurrent.{TimeUnit, Executors}
 import com.twitter.finagle.util.TimerFromNettyTimer
 import org.jboss.netty.util.HashedWheelTimer
 import collection.mutable
+
 
 abstract class ScribeLike extends Service[Map[String, Any], Unit] {
 	protected val logger = NiceLogger("Scribe")
@@ -42,7 +43,7 @@ class ScribeBuffer(val other: ScribeLike, val duration: Duration) extends Scribe
 	private def flush() {
 		logger.trace("Flushing scribe buffer")
 		val toFlush = requests.dequeueAll(_ => true)
-		if (toFlush.nonEmpty) other.many(toFlush.toSeq)()
+		if (toFlush.nonEmpty) Await.result(other.many(toFlush.toSeq))
 	}
 
 	override def close(deadline: Time) = {

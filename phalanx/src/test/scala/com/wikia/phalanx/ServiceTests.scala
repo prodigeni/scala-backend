@@ -4,7 +4,7 @@ import com.twitter.conversions.time._
 import com.twitter.finagle.Service
 import com.twitter.finagle.builder.{ServerBuilder, ClientBuilder}
 import com.twitter.finagle.http._
-import com.twitter.util.{Future, Time, TimeControl}
+import com.twitter.util.{Future, Time, TimeControl, Await}
 import java.net.InetSocketAddress
 import java.nio.charset.Charset
 import org.jboss.netty.handler.codec.http.{HttpRequest, HttpResponse}
@@ -61,9 +61,11 @@ class ServiceTests extends FlatSpec {
 		.hostConnectionLimit(1)
 		.build()
 
+  def makeRequest(request: HttpRequest):HttpResponse = Await.result(client(request))
+
 	"Server" should "be running" in {
 		val request = RequestBuilder().url(address).buildGet
-		val response = client(request)()
+		val response = makeRequest(request)
 		val content = response.getContent.toString(charset)
 		assert(content === "PHALANX ALIVE")
 	}
@@ -71,7 +73,7 @@ class ServiceTests extends FlatSpec {
 	it should "work with POST" in {
 		checkScribe {
 			val request = RequestBuilder().url(address + "check?user=ala&wiki=1").addFormElement(("type", "tests"), ("content", "fuckąężźćńół")).buildFormPost()
-			val response = client(request)()
+			val response = makeRequest(request)
 			val content = response.getContent.toString(charset)
 			assert(content === "failure\n")
 		}
@@ -80,7 +82,7 @@ class ServiceTests extends FlatSpec {
 	it should "work with GET" in {
 		checkScribe {
 			val request = RequestBuilder().url(address + "check?user=ala&wiki=1&type=tests&content=fuck").buildGet()
-			val response = client(request)()
+			val response = makeRequest(request)
 			val content = response.getContent.toString(charset)
 			assert(content === "failure\n")
 		}
@@ -89,7 +91,7 @@ class ServiceTests extends FlatSpec {
   it should "work with GET with different case" in {
     checkScribe {
       val request = RequestBuilder().url(address + "check?user=ala&wiki=1&type=tests&content=FUck&content=ok").buildGet()
-      val response = client(request)()
+      val response = makeRequest(request)
       val content = response.getContent.toString(charset)
       assert(content === "failure\n")
     }
@@ -98,7 +100,7 @@ class ServiceTests extends FlatSpec {
   it should "work with GET, also without explicit type" in {
 		checkScribe {
 			val request = RequestBuilder().url(address + "check?user=ala&wiki=1&content=fuck").buildGet()
-			val response = client(request)()
+			val response = makeRequest(request)
 			val content = response.getContent.toString(charset)
 			assert(content === "failure\n")
 		}
@@ -108,7 +110,7 @@ class ServiceTests extends FlatSpec {
 	it should "return good JSON for /match" in {
 		checkScribe {
 			val request = RequestBuilder().url(address + "match?user=ala&wiki=1&type=tests&content=fuck").buildGet()
-			val response = client(request)()
+			val response = makeRequest(request)
 			val content = response.getContent.toString(charset)
 			assert(content != "[]")
     }
@@ -117,13 +119,13 @@ class ServiceTests extends FlatSpec {
 	it should "support multiple content parameters" in {
 		checkScribe {
 			val request = RequestBuilder().url(address + "check?user=ala&wiki=1&type=tests&content=ok&content=fuck&content=something").buildGet()
-			val response = client(request)()
+			val response = makeRequest(request)
 			val content = response.getContent.toString(charset)
 			assert(content === "failure\n")
 		}
 		checkScribe {
 			val request = RequestBuilder().url(address + "match?user=ala&wiki=1&type=tests&content=fuck&content=ok&content=something").buildGet()
-			val response = client(request)()
+			val response = makeRequest(request)
 			val content = response.getContent.toString(charset)
 			assert(content != "[]")
 		}
@@ -131,7 +133,7 @@ class ServiceTests extends FlatSpec {
 
 	it should "provide stats" in {
 		val request = RequestBuilder().url(address + "stats").buildGet()
-		val response = client(request)()
+		val response = makeRequest(request)
 		val content = response.getContent.toString(charset)
 		assert(content != "failure\n")
 	}

@@ -2,9 +2,9 @@ name := "wikifactory"
 
 organization := "com.wikia"
 
-version := "0.13"
+version := "0.14"
 
-scalaVersion := "2.10.1"
+scalaVersion := "2.10.2"
 
 publishMavenStyle := true
 
@@ -27,7 +27,7 @@ resolvers ++= Seq(
 )
 
 libraryDependencies ++= Seq(
-  "com.twitter" % "util-core_2.10" % "6.1.0",
+  "com.twitter" % "util-core_2.10" % "6.3.7",
   "org.yaml" % "snakeyaml" % "1.11",
   "com.typesafe.slick" %% "slick" % "1.0.0",
   "org.scalatest" % "scalatest_2.10" % "1.9.1" % "test",

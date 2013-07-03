@@ -228,6 +228,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
     val ids = if (changed.isEmpty) Seq.empty[Int] else changed.map(_.toInt)
     refreshRules(ids)
     if (notify) sendNotify(ids).within(timer, 20.seconds).onFailure( (exc) => logger.warn(s"Could not notify all nodes due to $exc."))
+    stats.updateLastRuleChange()
     Respond.ok
   }
   def statsString: String = {
