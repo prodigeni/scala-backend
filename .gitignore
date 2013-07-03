@@ -8,3 +8,4 @@ target
 phalanx.properties
 phalanx/deploy/phalanx-server.jar
 phalanx/deploy/logs
+wikifactory/.classpath
