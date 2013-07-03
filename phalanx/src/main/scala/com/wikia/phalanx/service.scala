@@ -69,7 +69,7 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
     val content = params.getAll("content").map(s => Checkable(s, lang))
     val user = params.get("user")
     val wiki = params.get("wiki").map(_.toInt)
-    val checkTypes = params.getAll("type")
+    val checkTypes = params.getAll("type").toList
     val ruleSystems: Iterable[RuleSystem] = if (checkTypes.isEmpty) rules.values else {
       try {
         checkTypes.map(s => rules(s)).toSet
