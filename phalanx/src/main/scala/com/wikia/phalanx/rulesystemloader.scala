@@ -2,6 +2,8 @@ package com.wikia.phalanx
 
 import scala.slick.driver.MySQLDriver.simple._
 
+
+
 abstract class RuleSystemLoader {
 	case class PhalanxRecord(id:Int, pcase:Int, exact:Int, regex:Int, author:Int, ptype:Int, textBlob:Array[Byte],
 		reasonBlob:Array[Byte], expireText:Option[String], lang:Option[String]) {
@@ -30,22 +32,10 @@ abstract class RuleSystemLoader {
 
 	val logger = NiceLogger("RuleSystemLoader")
 
-	val contentTypes = Map(// bitmask to types
-		(1, "content"), // const TYPE_CONTENT = 1;
-		(2, "summary"), // const TYPE_SUMMARY = 2;
-		(4, "title"), // const TYPE_TITLE = 4;
-		(8, "user"), // const TYPE_USER = 8;
-		(16, "question_title"), // const TYPE_ANSWERS_QUESTION_TITLE = 16;
-		(32, "recent_questions"), // const TYPE_ANSWERS_RECENT_QUESTIONS = 32;
-		(64, "wiki_creation"), // const TYPE_WIKI_CREATION = 64;
-		(128, "cookie"), // const TYPE_COOKIE = 128;
-		(256, "email") // const TYPE_EMAIL = 256;
-	)
-
 	def makeDbInfo(row:PhalanxRecord) = {
 		new DatabaseRule(row.text, row.id, row.reason,row.pcase == 1, row.exact == 1, row.regex == 1, row.lang, row.expire,	row.author, row.ptype)
 	}
-	private def ruleBuckets = (for (v <- contentTypes.values) yield (v, collection.mutable.Set.empty[DatabaseRule])).toMap
+	private def ruleBuckets = (for (v <- RuleSystemLoader.contentTypes.values) yield (v, collection.mutable.Set.empty[DatabaseRule])).toMap
 	private def dbRows(db:Database, ids:Option[Set[Int]]):Seq[PhalanxRecord] = {
 		logger.info("Getting database rows")
 		val rows = tryNTimes(3, {
@@ -76,7 +66,7 @@ abstract class RuleSystemLoader {
 			try {
 				val rule = makeDbInfo(row)
 				val t = row.ptype
-				for ((i:Int, s:String) <- contentTypes) {
+				for ((i:Int, s:String) <- RuleSystemLoader.contentTypes) {
 					if ((i & t) != 0) result(s) += rule
 				}
 				ids += rule.dbId
@@ -108,6 +98,21 @@ abstract class RuleSystemLoader {
 			oldMap.transform((key, rs) => rs.reloadRules(result(key), deletedIds))
 		}
 	}
+}
+
+object RuleSystemLoader {
+  final val contentTypes = Map(// bitmask to types
+    (1, "content"), // const TYPE_CONTENT = 1;
+    (2, "summary"), // const TYPE_SUMMARY = 2;
+    (4, "title"), // const TYPE_TITLE = 4;
+    (8, "user"), // const TYPE_USER = 8;
+    (16, "question_title"), // const TYPE_ANSWERS_QUESTION_TITLE = 16;
+    (32, "recent_questions"), // const TYPE_ANSWERS_RECENT_QUESTIONS = 32;
+    (64, "wiki_creation"), // const TYPE_WIKI_CREATION = 64;
+    (128, "cookie"), // const TYPE_COOKIE = 128;
+    (256, "email") // const TYPE_EMAIL = 256;
+  )
+  final val contentTypesReverse = contentTypes.map(_.swap).toMap.withDefaultValue(0)
 }
 
 object CombinedLoader extends RuleSystemLoader {

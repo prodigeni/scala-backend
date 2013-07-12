@@ -70,15 +70,14 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
     val user = params.get("user")
     val wiki = params.get("wiki").map(_.toInt)
     val checkTypes = params.getAll("type").toList
-    val ruleSystems: Iterable[RuleSystem] = if (checkTypes.isEmpty) rules.values else {
+    val ruleSystems: Iterable[(String, RuleSystem)] = if (checkTypes.isEmpty) rules else {
       try {
-        checkTypes.map(s => rules(s)).toSet
+        checkTypes.map(s => s -> rules(s))
       } catch {
         case _: NoSuchElementException => Set.empty
       }
     }
     val expected = params.get("expected").map(_.toInt)
-    val combinations: Iterable[(RuleSystem, Checkable)] = for (r <- ruleSystems;c <- content) yield (r, c)
     val cacheable:Option[String] = checkTypes match {
       case "user" :: Nil => Some(params.getAll("content").mkString("|"))
       case _ => None
@@ -91,9 +90,12 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
         }
         case _ => {
           val elapsed = com.twitter.util.Stopwatch.start()
-          val matches = combinations.view.flatMap((pair: (RuleSystem, Checkable)) => pair._1.firstMatch(pair._2))
-          val result = matches.take(1).headOption
-          result.map(sendToScribe(_))
+          val matches = ruleSystems.view.flatMap { case (s,r) => content.flatMap(c => r.firstMatch(c).map( (rule:DatabaseRuleInfo) => (s, rule))) }
+          val (hitType, result) = matches.headOption.map( x => Some(x._1) -> Some(x._2) ).getOrElse( None -> None)
+          result match {
+            case Some(r) => sendToScribe(r, RuleSystemLoader.contentTypesReverse(hitType.get))
+            case None => ()
+          }
           cacheable match {
             case Some(value) => userCache(cacheable.get) = result
             case _ => ()
@@ -115,14 +117,16 @@ class MainService(val reloader: (Map[String, RuleSystem], Traversable[Int]) => M
         }
       }
     }
-    def sendToScribe(rule: DatabaseRuleInfo): Future[Unit] = {
+    def sendToScribe(rule: DatabaseRuleInfo, hitType: Int): Future[Unit] = {
       if (user.isDefined && wiki.isDefined) {
         scribe(Map(
           "blockId" → rule.dbId,
           "blockType" → rule.typeMask,
           "blockTs" → com.wikia.wikifactory.DB.wikiCurrentTime,
           "blockUser" → user.get,
-          "city_id" → wiki.get
+          "city_id" → wiki.get,
+          "referer" -> request.referer.getOrElse(""),
+          "hitType" -> hitType
         ))
       }
       else Future.Done
